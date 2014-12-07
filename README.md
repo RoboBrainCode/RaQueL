@@ -1,17 +1,13 @@
 RaQueL
 ======
-
+RFC 1.0
 Code and Documentation of Robo-Brain Query Library for Python 3.x
 
-/*****************************************************
-
-*** RFC 1.0 ****** RaQueL 1.0 ************************
-
-*** Author: Dipendra Mirsa ***************************\n
-*** Description: Documentation of RaQueL based on ****\n
-*** arxiv techreport of RoboBrain paper accessed *****
-*** http://arxiv.org/abs/1412.0691 *******************
-******************************************************/
+RaQueL 1.0 
+Author: Dipendra Mirsa
+Description: Documentation of RaQueL based on 
+arxiv techreport of RoboBrain paper accessed
+http://arxiv.org/abs/1412.0691
 
 Features
 
