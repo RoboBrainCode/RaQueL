@@ -3,14 +3,14 @@ RaQueL
 RFC 1.0
 Code and Documentation of Robo-Brain Query Library for Python 3.x
 
-RaQueL 1.0 \\
-Author: Dipendra Mirsa\\
-Description: Documentation of RaQueL based on \\
-arxiv techreport of RoboBrain paper accessed
+RaQueL 1.0 <br/>
+Author: Dipendra Mirsa<br/>
+Description: Documentation of RaQueL based on <br/>
+arxiv techreport of RoboBrain paper accessed </br>
 http://arxiv.org/abs/1412.0691
 
 Features
 
 1. Graph Query Feature: support for fetch
-2. Programming Constructs
+2. Programming Constructs: basic support
 3. Project Specific Feature: Not supporting in this paper
