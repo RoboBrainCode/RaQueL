@@ -1,0 +1,243 @@
+﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+ * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
+ * working in Cornell Personal Robotics Lab.
+ * 
+ * More details - http://tellmedave.cs.cornell.edu
+ * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
+ */
+
+/*  Notes for future Developers - 
+ *    <no - note >
+ */
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.SolverFoundation.Common;
+using Microsoft.SolverFoundation.Services;
+using Microsoft.SolverFoundation.Solvers;
+
+namespace ProjectCompton
+{
+    class QPSolver
+    {
+        /* Class Description: Solve a QP program by converting to a linear
+         * program. The algorithm works as follows, given:
+         *  maximize a^T x + x^T b x
+         *  Ax >= C
+         * define auxillary variable z_ij = x_i x_j
+         *   maximize a^T x + b^T z = (a+b)^T [x,z] ; z is row-ordered
+         *      Ax >= C
+         *      x_i -z_ij  >= 0;  x_j - z_ij >= 0;  z_ij - x_i - x_j  >= -1;  */
+
+        double[] a = null;
+        double[,] b = null;
+        List<double[]> constraintsLower = null;
+        List<double> lower = null; //its dimension must be same as constraints row dimension
+		InteriorPointSolverParams ipsParams = null;
+		SimplexSolverParams ssParams = null;
+
+        public QPSolver(double[] a, double[,] b, List<double[]> constraintsLower, List<double> lower)
+        {
+            //Constructor Description: Initialize the QP program
+			if (b != null) 
+				this.toLinearProgram (a, b, constraintsLower, lower);
+			else
+			{
+				this.a = a;
+				this.b = b;
+				this.constraintsLower = constraintsLower;
+				this.lower = lower;
+				if (Constants.method == Solver.InteriorPoint)
+					this.ipsParams = new InteriorPointSolverParams ();
+				else if (Constants.method == Solver.Simplex)
+					this.ssParams = new SimplexSolverParams ();
+			}
+        }
+
+        public void destroy()
+        {
+            /* Function Description: Destroy the data-structures */
+            Array.Clear(this.a, 0, this.a.Length);
+			if(this.b!=null)
+            	Array.Clear(this.b, 0, this.b.Length);
+            for (int i = 0; i < this.constraintsLower.Count(); i++)
+                Array.Clear(this.constraintsLower[i], 0, this.constraintsLower[i].Length);
+            this.constraintsLower.Clear();
+            this.lower.Clear();
+        }
+
+		public Tuple<double[], double> solve()
+		{
+			//Function Description: Choose a wrapper for QP solver
+			switch (Constants.method) 
+			{
+				case Solver.InteriorPoint:
+					return this.interiorPoint();
+				case Solver.Simplex:
+					return this.simplex ();
+			}
+
+			throw new ApplicationException ("Unknown Mapping Method "+Constants.method.ToString());
+		}
+
+		private void toLinearProgram(double[] a, double[,] b, List<double[]> constraintsLower, List<double> lower)
+		{
+			/* Function Description: Converts quadratic program to a linear program 
+			 * using relaxation method described above */
+
+			int numNewVar = a.Length * a.Length;
+			this.a = new double[a.Length + numNewVar]; //expand a vector
+			for (int i=0; i<a.Length + numNewVar; i++) 
+			{
+				if (i < a.Length)
+					this.a [i] = a [i];
+				else 
+					this.a[i] = b[(i-a.Length)/a.Length,(i-a.Length)%a.Length];
+			}
+
+			this.constraintsLower = new List<double[]> ();
+			this.lower = new List<double> ();
+
+			for (int i=0; i<constraintsLower.Count()+numNewVar; i++) 
+			{
+				if (i < constraintsLower.Count ()) //expand existing constraints to add 0s for new variables
+				{
+					double[] constraintRow = Enumerable.Repeat(0.0,a.Length+numNewVar).ToArray();
+					for (int j=0; j<a.Length+numNewVar; j++) 
+					{
+						if (j < a.Length)
+							constraintRow [j] = constraintsLower [i] [j];
+					}
+					this.constraintsLower.Add (constraintRow);
+					this.lower.Add (lower [i]);
+				}
+				else //3*numNewVar more constraints are added
+				{
+					//work with variable numNewVar = z_pq
+					int p = (i -constraintsLower.Count()) / a.Length, q = (i-constraintsLower.Count())%a.Length;
+					double[] constraintRow1 = Enumerable.Repeat(0.0,a.Length+numNewVar).ToArray();
+					double[] constraintRow2 = Enumerable.Repeat(0.0,a.Length+numNewVar).ToArray();
+					double[] constraintRow3 = Enumerable.Repeat(0.0,a.Length+numNewVar).ToArray();
+
+					constraintRow1 [p] = 1; constraintRow1 [a.Length + p * q] = -1;
+					constraintRow2 [q] = 1; constraintRow1 [a.Length + p * q] = -1;
+					constraintRow3 [p] = - 1; constraintRow3 [q] = - 1; constraintRow1 [a.Length + p * q] = 1;
+
+					this.constraintsLower.Add (constraintRow1);
+					this.constraintsLower.Add (constraintRow2);
+					this.constraintsLower.Add (constraintRow3);
+					this.lower.Add(0);//x_p -z_pq  >= 0
+					this.lower.Add(0);//x_q - z_pq >= 0
+					this.lower.Add(-1);//z_pq - x_p - x_q  >= -1
+				}
+			}
+		}
+
+        private Tuple<double[], double> interiorPoint()
+        {
+            /* Function Description: Solves the QP program - 
+             * minimize x^Ta + x^Tbx
+             * linear constraint over x
+             * */
+
+            InteriorPointSolver ips = new InteriorPointSolver();
+
+            //Set the objective function
+            int numVar = a.Length;
+            int goal;
+            ips.AddRow("Goal", out goal);
+
+            int[] variables = new int[numVar];
+
+            for (int i = 0; i < numVar;i++ )
+                ips.AddVariable("X" + i, out variables[i]);
+
+            for (int i = 0; i < numVar; i++)
+            {
+                ips.SetCoefficient(goal, variables[i], a[i]);
+                /*for (int j = 0; j < numVar; j++)
+                    ips.SetCoefficient(goal, b[i, j], variables[i], variables[j]);*/
+            }
+            ips.AddGoal(goal, 0, false);
+
+            //Set the constraints
+            int numConstraints = this.constraintsLower.Count();
+            for (int i = 0; i < numConstraints; i++)
+            {
+                int constraint;
+                ips.AddRow("Constraints" + i, out constraint);
+                for (int j = 0; j < numVar; j++)
+                    ips.SetCoefficient(constraint, variables[j], (Rational)this.constraintsLower[i][j]);
+                ips.SetLowerBound(constraint, (Rational)this.lower[i]);
+            }
+
+            /* Solve the program and return the optimum value
+             * Return the optimum parameters
+             * and also return the solved goal value * */
+
+            ips.Solve(this.ipsParams);
+            double[] result = new double[numVar];
+            for (int i = 0; i < numVar; i++)
+                result[i] = (double)ips.GetValue(variables[i]);
+
+            return new Tuple<double[], double>(result, (double)ips.GetSolutionValue(goal));
+        }
+
+        private Tuple<double[], double> simplex()
+        {
+            /* Function Description: Solves the QP program - 
+             * minimize x^Ta
+             * linear constraint over x
+             * */
+
+            SimplexSolver ss = new SimplexSolver();
+
+            //Set the objective function
+            int numVar = a.Length;
+            int goal;
+            ss.AddRow("Goal", out goal);
+
+            int[] variables = new int[numVar];
+
+            for (int i = 0; i < numVar; i++)
+                ss.AddVariable("X" + i, out variables[i]);
+
+            for (int i = 0; i < numVar; i++)
+            {
+                ss.SetCoefficient(goal, variables[i], a[i]);
+                /*for (int j = 0; j < numVar; j++)
+                    ips.SetCoefficient(goal, b[i, j], variables[i], variables[j]);*/
+            }
+            ss.AddGoal(goal, 0, false);
+
+            //Set the constraints
+            int numConstraints = this.constraintsLower.Count();
+            for (int i = 0; i < numConstraints; i++)
+            {
+                int constraint;
+                ss.AddRow("Constraints" + i, out constraint);
+                for (int j = 0; j < numVar; j++)
+                    ss.SetCoefficient(constraint, variables[j], (Rational)this.constraintsLower[i][j]);
+                ss.SetLowerBound(constraint, (Rational)this.lower[i]);
+            }
+
+            /* Solve the program and return the optimum value
+             * Return the optimum parameters
+             * and also return the solved goal value * */
+
+            ss.Solve(this.ssParams);
+            double[] result = new double[numVar];
+            for (int i = 0; i < numVar; i++)
+                result[i] = (double)ss.GetValue(variables[i]);
+
+			double score = Double.PositiveInfinity;
+			if ((double)ss.GetSolutionValue (goal) != null)
+				score = (double)ss.GetSolutionValue (goal);
+
+			return new Tuple<double[], double> (result, score);
+        }
+    }
+}

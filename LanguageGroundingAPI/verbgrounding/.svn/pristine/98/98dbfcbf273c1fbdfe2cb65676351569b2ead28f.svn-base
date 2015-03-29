@@ -1,0 +1,85 @@
+﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+ * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
+ * working in Cornell Personal Robotics Lab.
+ * 
+ * More details - http://tellmedave.cs.cornell.edu
+ * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
+ */
+
+/*  Notes for future Developers - 
+ *    <no - note >
+ */
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ProjectCompton
+{
+    class Processing
+    {
+        /*Class Description : Defines functions for language processing*/
+
+        public static double lexDistance(String name1, String name2)
+        {
+            /* Function Description : Returns a 0-1 lexical distance between name1 and name2.
+             * Example : Coffee-powder and coffee are related concepts when it comes to filling.
+             * This distance should be defined more formally and studied but so far I will hardcode
+             * the distances for different set of objects*/
+            List<Tuple<String, String>> relatedNames = new List<Tuple<string, string>>(); //adjacency lists of objects
+            relatedNames.Add(new Tuple<String, String>("Mug", "Cup"));
+            relatedNames.Add(new Tuple<String, String>("Coffee", "Coffee-Powder"));
+            relatedNames.Add(new Tuple<String, String>("Sugar", "Sugar-Box"));
+            relatedNames.Add(new Tuple<String, String>("Milk", "Milk-Box"));
+            relatedNames.Add(new Tuple<String, String>("Coffee-Powder", "Sugar-Box"));
+            relatedNames.Add(new Tuple<String, String>("Coffee-Powder", "Milk-Box"));
+            relatedNames.Add(new Tuple<String, String>("Milk-Box", "Sugar-Box"));
+
+            foreach (Tuple<String, String> relatedName in relatedNames)
+            {
+                if (relatedName.Item1.Equals(name1, StringComparison.OrdinalIgnoreCase) && relatedName.Item2.Equals(name2, StringComparison.OrdinalIgnoreCase)
+                   || relatedName.Item1.Equals(name2, StringComparison.OrdinalIgnoreCase) && relatedName.Item2.Equals(name1, StringComparison.OrdinalIgnoreCase))
+                    return 0;
+            }
+
+            return 1;
+        }
+
+        public static void stemming(SyntacticTree verb)
+        {
+            /*Function Description : Stems the verb*/
+            String verbName = verb.getName();
+            int length = verbName.Count();
+
+            if (verbName.EndsWith("ed"))
+            {
+                verbName=verbName.Substring(0, length - 2);
+            }
+            else if (verbName.EndsWith("ing"))
+            {
+                verbName = verbName.Substring(0, length - 3);
+            }
+            else if (verbName.EndsWith("e"))
+            {
+                verbName = verbName.Substring(0, length - 1);
+            }
+
+            verb.changeVerb(verbName);
+        }
+
+        public static String coelesceString(String s)
+        {
+            /* Function Description : Takes a text-string and joins sequence of words
+             * into a single word*/
+            s = s.Replace("crock pot","pot");
+            s = s.Replace("slow cooker", "cooker");
+            s = s.Replace("box of ice cream","ice-cream");
+            s = s.Replace("ice cream","ice-cream");
+            s = s.Replace("coffee drink", "coffee");
+            return s;
+        }
+     
+    }
+}

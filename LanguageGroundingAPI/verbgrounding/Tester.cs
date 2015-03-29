@@ -1,0 +1,660 @@
+﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+ * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
+ * working in Cornell Personal Robotics Lab.
+ * 
+ * More details - http://tellmedave.cs.cornell.edu
+ * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
+ */
+
+/*  Notes for future Developers - 
+ *    <no - note >
+ */
+
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ProjectCompton
+{
+    class Tester
+    {
+        /*Class Description : Is the main class which provides functionalities for testing and running the algorithm.
+         * At this point the inference is also part of this class but there are plans to move it to a separate class.
+         * This class also provides baseline algorithms.*/
+
+		public List<VerbProgram> veil{get; private set;}            //contains a list of training VEIL
+		public List<Environment> envList{get; private set;}
+
+		//public List<String> methodName{get; private set;}
+		//public List<Boolean> methodFlag{get; private set;}
+		public Dictionary<String,Boolean> methods{ get; private set;}
+
+		public List<List<Environment>> listOfAllEnv{get; private set;}
+
+		public Inference inf{ get; private set;}       //Inference object
+		public Learning lrn{get; private set;}
+        private Features ftr = null;                   //Feature object
+        private Random rnd = null;                     //Random Number Generator to be used the entire program
+        public Simulator sml = null;                   //Simulator Object
+        public Parser obj = null;                      //Parser Object
+        public SymbolicPlanner symp = null;            //Symbolic Planner Object
+        public DataAnalysis datany = null;             //Data Analysis Object
+        public Metrics mtr = null;                     //Metric Object 
+        public Logger lg = null;                       //Logger Object
+        public System.Diagnostics.Stopwatch ss = null; //stopwatch Object
+		public int prevTimeStmp = 0; 				   //stores last stopwatch recording
+        public bool jumps = false;
+
+        //Constructors
+		public Tester()
+        {
+            // Constructor Description : Initializes the public objects
+            this.ss = new System.Diagnostics.Stopwatch(); //stopwatch
+            this.ss.Start(); //starts the stop-watch, Stop-watch should be started as soon as possible
+			this.envList =  new List<Environment>();
+			this.listOfAllEnv = new List<List<Environment>> ();
+            this.sml = new Simulator(); //simulator
+            this.obj = new Parser(); //parser
+            this.mtr = new Metrics(this); //metric
+            this.lg = new Logger(); //logger
+            this.symp = new SymbolicPlanner(this.lg); //symbolic planner
+            this.datany = new DataAnalysis(this.obj, this.envList, this.lg); //Data Analysis Object
+			this.veil = new List<VerbProgram>(); //veil library
+            this.rnd = new Random();//random number generator
+            this.ftr = new Features(this.lg, this.obj, this.sml);
+            this.inf = new Inference(this.lg, this.sml, this.symp, this.veil, this.envList, this.obj, this.ftr);
+			this.lrn = new Learning(this);
+
+			this.methods = new Dictionary<string, bool> ();
+			this.methods.Add ("AccScoreLatentTrim",false);
+			this.methods.Add ("TemplateBased",false);
+			this.methods.Add ("TreeExploration",false);
+			this.methods.Add ("Chance",false);
+			this.methods.Add ("UBL_Baseline",false);
+			this.methods.Add ("RSS_2015_Generation Only",false);
+			this.methods.Add ("RSS_2015_Generation+Storage",false);
+			this.methods.Add ("RSS_2015_VEIL-Template Only",false);
+			this.methods.Add ("RSS_2015_Generation+VEIL-Template",false);
+			this.methods.Add ("RSS_2015_Generation+VEIL-Template-Storage",true);
+		}
+
+        public void destroyer()
+        {
+            // Function Description: Destroys the data-structures
+            this.veil.Clear();
+            this.ftr.destroyer();
+        }
+
+        public void writeTime(String information="")
+        {
+            // Function Description: Writes the elapsed time
+			int currentTime = this.ss.Elapsed.Seconds;
+			this.lg.writeToFile (information + "<span style='margin-left:20px; color:brown;'>Time Since Last Stamp: "
+			                     +(currentTime-this.prevTimeStmp)+"; &nbsp;&nbsp;&nbsp;&nbsp;Total Time Elapsed: " + currentTime + " sec</span>");
+			this.prevTimeStmp = currentTime;
+        }
+
+		public List<List<List<double>>> initEvaluation()
+		{
+			// Function Description: Returns evaluation datastructure
+			List<List<List<double>>> evaluation = new List<List<List<double>>> (); // Method [ Metric [ Score]]
+			for (int i = 0; i < this.methods.Count(); i++)
+			{
+				evaluation.Add(new List<List<double>>());
+				for(int mtr=0; mtr<Metrics.numMetrics;mtr++)
+					evaluation[i].Add(new List<double>());
+			}
+			return evaluation;
+		}
+
+        public void displayStructure()
+        {
+            /*Function Description : Displays the verbProgram datastructre*/
+            String listOfVerbs = "";
+            foreach (VerbProgram v in this.veil)
+                listOfVerbs = listOfVerbs + ", " + v.getName();
+            lg.writeToFile("<h3>The Learned Verb Model</h3><br/>Learned Unique Names : " + listOfVerbs);
+            foreach (VerbProgram v in this.veil)
+                v.display(this.lg);
+        }
+
+        public List<Tuple<List<int>, List<int>>> crossValidator()
+        {
+            /*Function Description: Creates a cross validation sample. We experiment with two type
+			 * of cross validation- test has unseen environments and test has unseen tasks. */
+
+            List<Tuple<List<int>, List<int>>> datas = new List<Tuple<List<int>, List<int>>>();
+			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> allData = this.obj.returnAllData ();
+
+			/* For this, the algorithm needs to separate the dataset into [train,test] pair such that no
+             * environment(task) from one exists in the other. In VEIL-1000 dataset which this version uses, there
+             * are 20 environments for 2 scenarios. The algorithm trains on 16 environments(8 task) and tests on the
+             * remaining 4(2). These are kept 2(1)from each scenario. The folds are
+             * Env: [ {train:(1-8, 11-18), test:(1-2, 11-12)}, {train:(1-2 U 5-10, 11-13 U 15-20), test:(3-4, 13-14)}, .... { train:(1-8, 11-18), test:(9-10, 19-20) }
+             * Task: [ {train:(2-5, 7-10), test:(1, 6)}, {train:(1-1 U 3-5, 6-6 U 8-10), test:(2, 7)}, .... { train:(1-4, 6-9), test:(5, 10) }
+             * there are always 5 folds. */
+
+			for (int fold = 1; fold <= 5; fold++)
+			{
+				List<int> train = new List<int> ();
+				List<int> test = new List<int> ();
+				//first item of first tuple is the environment [1-20] and second is the objective [1-10]
+				for (int iter = 0; iter < allData.Count(); iter++) 
+				{
+					Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> t = allData [iter];
+					int environment = t.Item1.Item1, objective = t.Item1.Item2;
+					if (Constants.scheme == CrossValidationScheme.Environment) 
+					{
+						if (2 * (fold - 1) + 1 <= environment && environment <= 2 * (fold - 1) + 2
+							|| 2 * (fold - 1) + 11 <= environment && environment <= 2 * (fold - 1) + 12)
+							test.Add (iter);
+						else
+							train.Add (iter);
+					}
+					else if(Constants.scheme==CrossValidationScheme.Task)
+					{
+						if (fold == objective || fold +5 == objective )
+							test.Add (iter);
+						else
+							train.Add (iter);
+					}
+				}
+
+				#region permute_the_test
+				/*Random rnd = new Random();
+				for(int i=0; i<test.Count(); i++) //Knuth Shuffle Algorithm
+				{
+					int tmp = test[i];
+					int r = rnd.Next(i, test.Count());
+					test[i] = test[r];
+					test[r] = tmp;
+				}*/
+				#endregion
+
+				datas.Add (new Tuple<List<int>, List<int>> (train, test));
+			}
+            return datas;
+		}
+
+        public void constructDataStructure(List<int> train)
+        {
+            /* Function Description: Given training data, it constructs
+             * the data structure and features */
+            this.bootstrapVEILTemplate(train);                      // build VEIL dataset
+			this.ftr.constructFeatureDataStructures (train, this.methods.Values.ToList(), this.veil,
+			                                         this.envList, this.listOfAllEnv, this.inf.sensim);
+
+            if (this.methods.ElementAt(0).Value)
+                this.ftr.buildBagOfWordRelation(train);
+        }
+
+        public void createAndAddVEILTemplate(List<Instruction> insts, int start, int end, Clause cls, Environment env, int entry)
+        {
+            /* Function Description : Add the clause entry to the VEIL dataset
+             * insts is a sequence of instruction of which insts[start:end] is relevant
+             * cls and env are the given clause and environment. entry is the entry in dataset
+             * from which this data is coming */
+
+            //Get the correct instruction sequence
+            List<Instruction> instructionSequence = new List<Instruction>();
+            if (start <= end) //non-empty instruction sequence
+            {
+                for (int i = start; i <= end; i++)
+					instructionSequence.Add(insts[i].makeCopy());  //copy the instruction here
+            }
+
+            //Copy the clause
+            Clause clsCopy = cls;//.makeCopy(); //makecopy doesnt copy. Be wary.
+            Environment envCopy = env.makeCopy();
+
+            //Create the template
+            VeilTemplate vtmp = new VeilTemplate(clsCopy, instructionSequence, envCopy, entry, this.sml);
+			vtmp.leCorrMatrix = vtmp.env_.getLECorrMatrix (vtmp.cls_,insts.GetRange(0,start),this.inf.sensim, this.ftr);
+			this.addVEILTemplate (vtmp);
+        }
+
+		public void addVEILTemplate(VeilTemplate vtmp)
+		{
+			/* Function Description: add the veil template to the list of program */
+			String verbName = vtmp.cls_.verb.getName ();
+			bool added = false;
+			foreach (VerbProgram vprog in this.veil)
+			{
+				if (vprog.getName().Equals(verbName, StringComparison.OrdinalIgnoreCase)) //add to the exisiting condition
+				{
+					added = true;
+					vprog.add(vtmp);
+				}
+			}
+
+			if (!added)//not added
+			{
+				//create a new entry
+				VerbProgram vprog = new VerbProgram(verbName);
+				vprog.add(vtmp);
+				this.veil.Add(vprog); //add the verb program
+			}
+		}
+
+        public void loadAllEnv()
+        {
+            /* Function Description : It parses and stores two environment - 
+             * 1. Starting environment which are stored in xml file.
+             *    The environment is represented by a graph where node represent
+             *    an object and edges represents relationship between objects 
+             * 2. Load the intermediate environment for all the points in the dataset. 
+             *    Each point has an instruction sequence I{1...n}. This function stores
+             *    the environment {E0...En} where E0 is a starting environment already loaded
+             *    in step 1. And Ei = simulator(Ei-1, Ii)*/
+
+            //Load the starting environment and store it in envList
+            foreach (String scn in Constants.scenarios)
+            {
+                for (int i = 1; i <= Constants.numEnvironment; i++)
+                {
+                    Environment env = new Environment();
+                    env.loadEnvironment(scn + "/" + scn + i.ToString() + ".xml");
+                    this.envList.Add(env);
+                }
+            }
+        }
+
+		public void loadIntermediateEnv()
+		{
+			//Function Description: Load intermediate environment
+			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> datas = this.obj.returnAllData();
+			for(int i=0; i<datas.Count(); i++)
+			{
+				/* We need to find different Environment at different level of instruction
+                 * These environments will NOT be modified hence same environment can be inserted at different level */
+				Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> data = datas [i];
+				Environment begin = this.envList[data.Item1.Item1 - 1];
+				List<Environment> listEnv = new List<Environment>() { begin };
+				Console.WriteLine ("Data " + i + " out of " + datas.Count ());
+
+				foreach (Instruction inst in data.Item3)
+				{
+					if(inst == null)
+						throw new ApplicationException ("Instruction is null");
+					Environment tail = listEnv[listEnv.Count - 1];
+					Environment result = this.sml.execute(inst, tail, true);  //execute the instruction inst on the tail environment
+					if (result == null) 
+						throw new ApplicationException ("Load Intermediate Environment: Error in executing instruction");
+					listEnv.Add(result);
+				}
+
+				if(listEnv.Count() != data.Item3.Count()+1)
+					throw new ApplicationException ("List of Environments not same as instructions");
+				this.listOfAllEnv.Add(listEnv);
+			}
+		}
+
+        public void bootstrapVEILTemplate(List<int> train)
+        {
+            /* Function Description : Creates VEIL datastructure from the training dataset */
+
+            List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> data = this.obj.returnAllData();
+            List<List<Tuple<int, int>>> alignments = this.obj.returnAllAlignment();
+
+            foreach (int index in train)
+			{
+                Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> info = data[index];
+                int numClause = info.Item4.Count();
+
+                for (int i = 0; i < numClause; i++)                  //iterating over each single-verb event clause
+                {
+                    Clause cls = info.Item4[i];
+                    int numSubClauses = cls.numNodes();
+                    Environment env = this.listOfAllEnv[index][alignments[index][i].Item1];
+                    int start = alignments[index][i].Item1;
+                    int end = alignments[index][i].Item2;
+
+					if (end < start) //empty instruction sequence
+						continue;
+
+                    if (numSubClauses == 0)
+                        this.lg.writeToErrFile("Could Not Find A Single Clause for : { " + info.Item4[i].sentence + " } Source of Error (Entry " + index + ")");//report error
+                    else if (numSubClauses == 1)
+                        this.createAndAddVEILTemplate(info.Item3, start, end, info.Item4[i].rootClause(), env, index);
+                    else //wrong but let's go with the first one for the moment
+                    {
+                        this.createAndAddVEILTemplate(info.Item3, start, end, info.Item4[i].rootClause(), env, index);
+                        this.lg.writeToErrFile("Found Many Clauses for : { " + info.Item4[i].sentence + " } Source of Error (Entry " + index + ")<br/>");
+                    }
+                }
+            }
+        }
+
+		public void createNewTemplatesFromUnsupervisedData(List<bool> methods, List<object> param)
+		{
+			/* Function Description: The algorithm benefits from unsupervised data and we use this data to 
+			 * to pump in new templates. */
+
+			List<Tuple<Tuple<int, int>, Clause, List<Clause>>> unlabelledData = this.obj.unlabelledData;
+
+			for (int i = 0; i < unlabelledData.Count(); i++)
+			{
+				Console.WriteLine ("Pumping Data Using "+i.ToString()+"\n-----------------\n");
+				Tuple<Tuple<int, int>, Clause, List<Clause>> testSample = unlabelledData[i];
+				if (testSample.Item2 == null)
+					continue;
+
+				Tuple<int, int> envAndObjective = testSample.Item1;
+				for (int method = 0; method < this.methods.Count(); method++) // Iterating Overall Algorithms
+				{
+					if (!this.methods.ElementAt(method).Value)
+						continue;
+
+					switch (method)
+					{
+						case 6: //Main Model using only generated templates
+								List<object> param4 = new List<object> () { (object)false, (object)true };
+								inf.acl2015 (testSample.Item2, this.envList [envAndObjective.Item1 - 1], this, (Dictionary<String, Double>)(param [5]), param4);
+								break;
+						case 9:	//Main Model using both veil and generated templates
+								List<object> param6 = new List<object> () { (object)true, (object)true };
+								inf.acl2015 (testSample.Item2, this.envList [envAndObjective.Item1 - 1], this, (Dictionary<String, Double>)(param [8]), param6);
+								break;
+						default: break;
+					}
+				}
+			}
+		}
+
+		public List<List<double[]>> inference(List<bool> methods, List<int> test, List<object> param)
+        {
+            /* Function Description : Takes input from Main function of which
+             * type of testing method to use and gives the output */
+
+			//test.RemoveRange (7, test.Count () - 7);
+            List<List<double[]>> scores = new List<List<double[]>>(); //Method [ Metric [ Score ]  ]
+            for (int i = 0; i < methods.Count(); i++)
+            {
+                scores.Add(new List<double[]>());
+				for (int mtr=0; mtr< Metrics.numMetrics; mtr++)
+					scores [i].Add (new double[test.Count ()]);
+            }
+
+			List<Tuple<String,List<Instruction>>> ublOutput = null;
+			if (this.methods.ElementAt (4).Value) //UBL baseline works best on entire test not per point
+				ublOutput = this.inf.ublBaseline (test);
+
+			List<double> cumulativeIED = new List<double> ();
+			List<double> cumulativeEED = new List<double> ();
+			double cumulIED = 0, cumulEED = 0;
+
+			//this.obj.getParserAccuracy (test);
+
+            List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> datas = this.obj.returnAllData();
+            for (int i = 0; i < test.Count(); i++)
+            {
+				Console.WriteLine ("Working on Test Case "+i.ToString()+"\n-----------------\n");
+                Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> testSample = datas[test[i]];
+                if (testSample.Item2 == null)
+                    continue;
+
+				List<Instruction> groundtruth = testSample.Item3;
+                Tuple<int, int> envAndObjective = testSample.Item1;
+                String sentence = "";
+				if (testSample.Item2.getSubTreeSentence () != null)
+					sentence = testSample.Item2.getSubTreeSentence ();
+                this.lg.writeToFile("<div style='border:1px solid red;'><span> Solving Problem ( Entry " + test[i] +
+				                    " Environment: "+envAndObjective.Item1+") <br/> Sentence : <i>"+ sentence + "</i></span><br/>");
+                for (int method = 0; method < this.methods.Count(); method++) // Iterating Overall Algorithms
+                {
+                    if (!this.methods.ElementAt(method).Value)
+                        continue;
+					this.writeTime ("Test Case "+i.ToString()+" "+this.methods.ElementAt(method).Key);
+					List<Instruction> inferred = null;
+                    // Running the Particular Algorithm on this test data point
+                    this.lg.writeToFile("<span> Using Method Name " + this.methods.ElementAt(method).Key + "</span><br/>");
+                    switch (method)
+                    {
+						case 0: inferred = inf.misra2014(envAndObjective, this.envList[envAndObjective.Item1 - 1], this, 5, (Dictionary<String, Double>)(param[0]));// this.distanceMethodWithLatentNodesAndTrim(sample, this.methodName[method]);
+        	                    break;
+						case 1: inferred = inf.predefinedTemplateBaseline(testSample.Item2, this.envList [envAndObjective.Item1 - 1]); //Manually Defined Templates
+    	                        break;
+                        case 2: inferred = inf.treeExploration(envAndObjective); //Search Method
+	                            break;
+						case 3: inferred = inf.chance (testSample.Item2, this.envList[envAndObjective.Item1 - 1]); // change
+								break;
+						case 4: this.lg.writeToFile (ublOutput[i].Item1); //log of the UBL algorithm
+								inferred = ublOutput [i].Item2; //UBL [Kwiatowski's algorithm]
+								break;
+						case 5: //Main Model: Generated Templates Only
+								List<object> param5 = new List<object> () { (object)false, (object)true, (object)false};	
+								inferred = inf.acl2015 (testSample.Item2, this.envList [envAndObjective.Item1 - 1], this, (Dictionary<String, Double>)(param [5]), param5);
+								inferred = Global.filter (inferred);
+								NoiseRemoval.instSeqCleaning(inferred,this.envList [envAndObjective.Item1 - 1],this.sml);
+                            	break;
+						case 6: //Main Model: Generated Templates And Storing Them
+								List<object> param6 = new List<object> () { (object)false, (object)true, (object)true};
+								inferred = inf.acl2015 (testSample.Item2, this.envList [envAndObjective.Item1 - 1], this, (Dictionary<String, Double>)(param [6]), param6);
+								inferred = Global.filter (inferred);
+								NoiseRemoval.instSeqCleaning(inferred,this.envList [envAndObjective.Item1 - 1],this.sml);
+								break;
+						case 7: //Main Model: Only VEIL Templates
+								List<object> param7 = new List<object> () { (object)true, (object)false, (object)false};
+								inferred = inf.acl2015 (testSample.Item2, this.envList [envAndObjective.Item1 - 1], this, (Dictionary<String, Double>)(param [7]), param7);
+								inferred = Global.filter (inferred);
+								NoiseRemoval.instSeqCleaning(inferred,this.envList [envAndObjective.Item1 - 1],this.sml);
+								break;
+						case 8:	//Main Model: Only VEIL Templates and Generated Templates
+								List<object> param8 = new List<object> () { (object)true, (object)true, (object)false};
+								inferred = inf.acl2015 (testSample.Item2, this.envList [envAndObjective.Item1 - 1], this, (Dictionary<String, Double>)(param [8]), param8);
+								inferred = Global.filter (inferred);
+								NoiseRemoval.instSeqCleaning (inferred, this.envList [envAndObjective.Item1 - 1], this.sml);
+								break;
+						case 9:	//Main Model: Only VEIL Templates, Generated Templates and Storing them
+								List<object> param9 = new List<object> () { (object)true, (object)true, (object)true};
+								inferred = inf.acl2015 (testSample.Item2, this.envList [envAndObjective.Item1 - 1], this, (Dictionary<String, Double>)(param [9]), param9);
+								inferred = Global.filter (inferred);
+								NoiseRemoval.instSeqCleaning (inferred, this.envList [envAndObjective.Item1 - 1], this.sml);
+								break;
+						default: break;
+                    }
+
+					//inferred = Inference.makeValidInstruction (this.envList [envAndObjective.Item1 - 1], inferred); //convert pseudo-instruction into valid instruction
+
+                    #region fancyOutput
+                    this.lg.writeToFile("<div> Final Output Cost <br/><br/><table><tr><th>Ground Truth</th><th>Inferred Sequence</th></tr>");
+					int count = Math.Max(inferred.Count(),groundtruth.Count());
+
+                    for (int k = 0; k < count; k++)
+                    {
+                        this.lg.writeToFile("<tr><td>");
+                        if (k < groundtruth.Count())
+                            groundtruth[k].display(this.lg);
+                        this.lg.writeToFile("</td><td>");
+                        if (k < inferred.Count())
+                            inferred[k].display(this.lg);
+                        this.lg.writeToFile("</td></tr>");
+                    }
+                    this.lg.writeToFile("</table></div><br/><br/>");
+                    #endregion
+
+					//Compute Metric
+					List<Instruction> instRes = Global.filter (inferred); //inferred;
+					double scoreLV = (double)this.mtr.levenshtein (instRes, groundtruth) / ((double)Math.Max (groundtruth.Count, instRes.Count) + Constants.epsilon);
+					Tuple<Double, String> uWEED = this.mtr.unweightedEED (this.envList [envAndObjective.Item1 - 1], groundtruth, instRes); //Item2 is ground truth and has to be first
+					double scoreWEED = this.mtr.weightedEED (this.envList [envAndObjective.Item1 - 1], groundtruth, instRes); //Item2 is ground truth and has to be first
+					Tuple<Double,String> end = this.mtr.endStateMatch (this.envList [envAndObjective.Item1 - 1], instRes, groundtruth);
+
+                    //Normalize the metric to 100 such that larger scores are better
+                    scores[method][0][i] = (1 - scoreLV) * 100;
+                    scores[method][1][i] = (1 - uWEED.Item1) * 100;
+                    scores[method][2][i] = (1 - scoreWEED) * 100;
+					scores [method] [3] [i] = end.Item1 * 100;
+
+					cumulIED = cumulIED + scores [method] [0] [i];
+					cumulEED = cumulEED + scores [method] [1] [i];
+					cumulativeIED.Add (cumulIED);
+					cumulativeEED.Add (cumulEED);
+
+					this.lg.writeToFile ("<span style='color:green'> Using Method = " + this.methods.ElementAt (method).Key + "<br/>" +
+										 ", LV Score : = " + scores [method] [0] [i] + "<br/>" +
+										 " uWEED Score := " + scores [method] [1] [i] + /*" Log ( " + uWEED.Item2 + */"<br/>" +
+									     " WEED Score := " + scores [method] [2] [i] + "<br/>" +
+										 " END-ENV Score := " + scores [method] [3] [i] + "(" + end.Item2 + ")</span><br/><br/>");
+					//double cacheHitPercent = (this.symp.cacheHit * 100) / (double)(this.symp.cacheHit + this.symp.cacheMiss + Constants.epsilon); //cache hit of interpolation
+                }
+                this.lg.writeToFile("</div>");
+            }
+
+			#region fancy_presentation
+            String data = "<table><tr><td> Method Name </td> <td> Average </td> <td>Variance </td> </tr>";
+            for (int i = 0; i < methods.Count(); i++)
+            {
+				if (!this.methods.ElementAt(i).Value)
+					continue;
+				for(int mtr=0; mtr < Metrics.numMetrics;mtr++)
+				{
+					if (mtr == 0)
+						data = data + "<tr><td>" + this.methods.ElementAt(i).Key + "</td><td>" + scores [i] [0].Average () + "</td><td>" + Global.variance (scores [i] [0]) + "</td></tr>";
+				    else data = data + "<tr><td> </td><td>" + scores [i] [mtr].Average () + "</td><td>" + Global.variance (scores [i] [mtr]) + "</td></tr>" ;
+				}
+            }
+            data = data + "</table>";
+            this.lg.writeToFile(data);
+			#endregion 
+
+			#region gnu_plot_data
+			/*System.IO.StreamWriter gplot_ied = new System.IO.StreamWriter(Constants.rootPath+"vgs_ftrupdate_70_10train_ied.dat");
+			System.IO.StreamWriter gplot_eed = new System.IO.StreamWriter(Constants.rootPath+"vgs_ftrupdate_70_10train_eed.dat");
+			gplot_ied.WriteLine("#Method VEIL+Gen+Storage (VGS) - 60 datapoints IED Score\n#iterations cumulativescore");
+			gplot_eed.WriteLine("#Method VEIL+Gen+Storage (VGS) - 60 datapoints EED SCore\n#iterations cumulativescore");
+			for(int i=0; i<test.Count();i++)
+			{
+				gplot_ied.WriteLine(i+"\t "+cumulativeIED[i]/(double)(i+1));
+				gplot_eed.WriteLine(i+"\t "+cumulativeEED[i]/(double)(i+1));
+			}
+			gplot_ied.Flush(); gplot_eed.Flush();
+			gplot_ied.Close(); gplot_eed.Close();*/
+			#endregion
+
+            return scores;
+        }
+
+        static void Main(string[] args)
+        {
+            /* Function Description : Main function which does the duty of running the algorithm on a given dataset.
+             * It reads and parses the dataset as well as organizes it into train, validation and test dataset.
+             * It then performs learning and runs the inference on the test dataset. The output is displayed in
+             * an interactive html manner. */
+
+            Tester testObj = new Tester();
+			/*double s1 = testObj.inf.sensim.GetScore ("study desk", "coffee table");//giza fails, wordnet works
+			double s2 = testObj.inf.sensim.GetScore ("game", "cd"); //wordnet fails, giza works
+			double s3 = testObj.inf.sensim.GetScore ("xbox", "bag of chips");//both fail :P
+			double s4 = testObj.inf.sensim.GetScore ("pillows", "pillow");//giza fails
+			double s5 = testObj.inf.sensim.GetScore ("book", "book");//both work
+			double s6 = testObj.inf.sensim.GetScore ("couches", "loveseat");//both work
+			double s7 = testObj.inf.sensim.GetScore ("couches", "armchair");//both work*/
+
+            //Step 1: Create datastructure needed by Inference and Learning
+            #region pre_processing_noise_removal_analysis
+			testObj.loadAllEnv();                   //load the starting environments
+            testObj.obj.parseLabelledData(testObj.lg, testObj.envList);       //Parses all the data
+			//testObj.obj.parseUnsupervisedData(testObj.lg, testObj.envList);   //Gets unsupervised data
+			NoiseRemoval.cleanData(testObj);        //Clean the data
+			List<Tuple<List<int>, List<int>>> datas = testObj.crossValidator(); // [[train, test], [train,test]... ]
+			Console.WriteLine("Reading test from file");
+			NoiseRemoval.readNoiseFreeTestDataFromFile(datas.Last().Item2, testObj.obj, testObj.lg);
+			NoiseRemoval.store(testObj.obj, true);
+			Console.WriteLine("Done reading - no parsing error");
+			testObj.loadIntermediateEnv();          //Load intermediate environments
+			Console.WriteLine("Done loading environment");
+			testObj.obj.storeAll(testObj.lg);       //Store the parsed data
+            testObj.datany.analyze();               //Analyze the dataset and output the analysis
+			List<List<List<double>>> evaluation = testObj.initEvaluation(); // Method [ Metric [ Scores ] ]
+			testObj.writeTime();
+            #endregion
+
+            /* Step 2: Learning-Inference Cycle */
+			for (int j= datas.Count()-1; j < datas.Count(); j++)   //iterating over [ [train, test], [train, test] ..... ]
+            {
+				Console.WriteLine ("Beginning with Experiment "+j);
+                List<int> train = datas[j].Item1, test = datas[j].Item2;
+			
+				//train.RemoveRange (10, train.Count()-10);
+				//Global.store (testObj.obj, test);
+				testObj.lg.writeToFile ("<h2>Begining With Experiment Number " + j + "</h2> Size of Training Data " + train.Count () + " and Test Data " + test.Count () + "<br/>");
+
+                /* Sub-Step 2.1: Learning */
+				List<double[]> pivot = testObj.lrn.analyticGradientDescent(train, 0,j);    //Apply learning algorithms to train weights
+				List<object> param = testObj.inf.initDict (pivot);
+				//return;
+				/* Sub-Step 2.2: Build Structures Required For Inference */
+				Console.WriteLine ("Building Structure: Training Data "+train.Count());
+				testObj.bootstrapVEILTemplate(train);                                      //build the VEIL datastructure
+				testObj.displayStructure();                                    			   //display the data
+				Console.WriteLine ("Entering 1");
+				testObj.ftr.constructFeatureDataStructures(train, testObj.methods.Values.ToList(), testObj.veil,
+				                                           testObj.envList, testObj.listOfAllEnv, testObj.inf.sensim);  //construct data structures required for computing features
+				Console.WriteLine ("Its should be attained");
+				//Console.WriteLine ("storing veil templates");
+				//testObj.obj.storeVEILTemplates(testObj.veil, testObj.lg);
+
+				/* Sub-Step 2.4: Pumping New Templates */
+				/*Console.WriteLine ("Pumping New Templates");
+				testObj.createNewTemplatesFromUnsupervisedData (testObj.methods.Values.ToList (), param);
+				testObj.displayStructure();                                    			   //display the data
+				testObj.ftr.destroyer ();
+				testObj.ftr.constructFeatureDataStructures(train, testObj.methods.Values.ToList(),
+				                                           testObj.veil, testObj.envList);  //construct data structures required for computing features
+			    */
+
+                /* Sub-Step 2.5: Inference */
+				Console.WriteLine ("Performing Inference");
+                List<List<double[]>> score = testObj.inference(testObj.methods.Values.ToList(), test, param); //Do inference on the test data and get results [Method [Metric [numbers] ] ]
+
+                /* Sub-Step 2.6: Analyze the results */
+                for (int mth = 0; mth < testObj.methods.Count(); mth++)
+                {
+                    for (int mtr = 0; mtr < Metrics.numMetrics; mtr++)
+                        evaluation[mth][mtr] = evaluation[mth][mtr].Concat(score[mth][mtr].ToList()).ToList();
+                }
+
+                testObj.destroyer(); //destroy data-structure
+            }
+
+			//Step 3: Analyze the results
+            testObj.inf.close();
+			double cacheHitPercent = (testObj.symp.cacheHit * 100) / (double)(testObj.symp.cacheHit + testObj.symp.cacheMiss + Constants.epsilon); //cache hit of interpolation
+			double atomicHitPercent = (testObj.symp.atomicCaseHit * 100) / (double)(testObj.symp.atomicCaseHit + testObj.symp.atomicCaseMiss + Constants.epsilon); //cache hit of interpolation
+            String data = "End of Overall Experiment : <br/><table><tr><td>Method Name</td><td>Average</td><td>Variance</td></tr>";
+            for (int mth = 0; mth < testObj.methods.Count(); mth++)
+            {
+				if (testObj.methods.ElementAt (mth).Value) 
+				{
+					for (int mtr=0; mtr<Metrics.numMetrics; mtr++) 
+					{
+						Console.WriteLine ("Metric "+mtr+" "+evaluation [mth] [mtr].Average ());
+						data = data + "<tr><td>" + testObj.methods.ElementAt (mth).Key + "</td><td>" + evaluation [mth] [mtr].Average () +
+							"</td><td>" + Global.variance (evaluation [mth] [mtr].ToArray ()) + "</td></tr>";
+					}
+				}
+            }
+
+            data = data + "</table>";
+            testObj.lg.setHighPriority();
+            testObj.lg.writeToFile(data);
+            testObj.lg.setLowPriority();
+		        
+            //Step 4: Delete the datastructures and close the streams
+            evaluation.ForEach(tmpMethod=>tmpMethod.ForEach (tmpMetric=>tmpMetric.Clear()));
+            testObj.ss.Stop();
+            testObj.writeTime();
+			testObj.symp.storeCache ();
+            testObj.lg.close(); //close the data
+
+			Console.WriteLine ("Num "+Global.num);
+			Console.WriteLine ("Cache Hit Percent  "+cacheHitPercent);
+			Console.WriteLine ("Atomic Hit Percent "+atomicHitPercent);
+			Console.WriteLine ("GoodBye");
+        }
+    }
+}

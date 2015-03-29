@@ -1,0 +1,365 @@
+private Tuple<List<Instruction>, int, Double> rss2015NodePredicates(Clause iterator, Tuple<Environment, List<Instruction>, double> history, Tester tester, List<Tuple<Environment, List<Instruction>, double>> entryThisClause, Dictionary<String, Double> weights)
+		{
+			/* Function Description: For a given node, the history (given environment, instruction so far, score so far) 
+             * this algorithm updates the entryThisClause vector by performing inference steps on this clause node.
+             * The algorithm also return the best score and corresponding instruction sequence. */
+
+			if (iterator.isCondition) //if clause represents a condition
+			{
+				Instruction marker = new Instruction ();
+				marker.setNameDescription ("$Conditional",new List<String>());
+				history.Item2.Add(marker);
+				entryThisClause.Add (history);
+				return new Tuple<List<Instruction>, int, double>(history.Item2, -1, history.Item3);
+			}
+
+			bool unseen = true; //verb maybe unseen in the data-set
+			Environment envTest = history.Item1;
+			List<Instruction> output = null;
+			double maxScoreLeaf = Double.NegativeInfinity;
+			int init = entryThisClause.Count ();
+
+			List<Object> objList = envTest.objects; 
+			List<List<String>> plurality = new List<List<String>> ();
+
+			double[,] leTestCorrMatrix = envTest.getLECorrMatrix (iterator, history.Item2, this.sensim, this.ftr);
+			List<String> grounded = new List<String> ();
+			String sdt = "";
+
+			for (int i=0; i<leTestCorrMatrix.GetLength(0); i++)
+			{
+				String mainNoun = iterator.lngObj [i].getName ();
+				int maxIndex = 0;
+				List<String> plurality_ = new List<string> () { objList[0].uniqueName };
+				for (int j=1; j<objList.Count(); j++) 
+				{
+					if (leTestCorrMatrix [i, j] > leTestCorrMatrix [i, maxIndex]) 
+					{
+						maxIndex = j;
+						plurality_.Clear ();
+						plurality_.Add (objList[j].uniqueName);
+					}
+					else if (leTestCorrMatrix [i, j] == leTestCorrMatrix [i, maxIndex]) 
+						plurality_.Add (objList[j].uniqueName);
+				}
+				//String baseForm = Global.fetchObjExpand (objList [maxIndex].uniqueName);
+				grounded = grounded.Union (plurality_).ToList();
+				sdt = sdt + i.ToString () + ". " + mainNoun + " maps to " + String.Join(", ",plurality_) + " Cost: "
+					+ leTestCorrMatrix [i, maxIndex] + " MaxFreq: " + plurality_.Count() + "<br/>";
+				plurality.Add (plurality_);
+			}
+
+			tester.lg.writeToFile (sdt);
+			tester.lg.writeToFile("<div> <button onclick='show(this)'>Clause - "+iterator.verb.getName()+"</button> <div style='display:none;'>");
+
+			#region apply_inference_steps
+			/* - iterate over each dataset D_iterator = { {(c,i,e,z,\xi) \in D such that v(C)=v(iterator) }
+			 * - fetch the flipped-predicates [post-conditions] of each environment
+			 * - call the symbolic planner to fulfill these post conditions
+			 * - infer I
+			 * - update alpha tables */
+
+			List<Tuple<String,double>> predScoreTable = new List<Tuple<String,double>>();
+
+			VerbProgram v = tester.veil.Find(veil_ => veil_.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase));
+			List<VeilTemplate> vtList = null;
+			if(v==null)
+			{
+				unseen=false; //its seen in th data-set
+				vtList = new List<VeilTemplate>();
+			}
+			else vtList = v.getProgram();
+
+			int count = 0;
+			foreach (VeilTemplate vt in vtList)
+			{
+				if(count==20) //optimization
+					break;
+
+				tester.lg.writeToFile("<br/>Count = "+count+" of "+vtList.Count());
+				Tuple<int[], double> mappingResult = this.map.mappingPredicates(vt, iterator, envTest, history.Item2, weights);
+				if(mappingResult ==null)
+				{
+					tester.lg.writeToFile("No appropriate mapping was found");
+					continue;
+				}
+
+				String iterConstraints = String.Join("^",this.instantiatePredicates(vt, mappingResult.Item1, envTest).Distinct().ToList());
+				if(iterConstraints.Length==0)
+					continue;
+
+				bool pivotNotFound = true;
+				double pivotScore = Double.NegativeInfinity;
+				List<Instruction> pivotTotal = null;
+				List<String> constraints = new List<String>(){iterConstraints};
+
+			    while(pivotNotFound)
+				{
+					/* We already have C_i that is the iterator, we also know the starting environment.
+					 * We call the symbolic planner that fulfills the instantiated constraint. */
+					List<String> constraintsSpace = iterConstraints.Split(new char[]{'^'}).ToList();
+					/*for(int leaveOut = 0; leaveOut < constraintsSpace.Count(); leaveOut++)
+					{
+						List<String> tmp = constraintsSpace.ToList();
+						tmp.RemoveAt(leaveOut);
+						if(tmp.Count()==0)
+							continue;
+						constraints.Add(String.Join("^",tmp.ToArray()));
+					}*/
+					if(constraints.Count()==0)
+					{
+						pivotNotFound=false; 
+						break;
+					}
+
+					String newConstraints = null;
+
+					foreach (String constraint in constraints)
+					{
+						/* For each constraint, find the instruction sequence that satisfies it
+                         * Each constraint is of type - predicate^predicate^.... where these
+                         * predicates need to be satisfied */
+
+						String cstr = this.expansion(plurality, constraint);
+						tester.lg.writeToFile("Constraints:- "+cstr+"<br/>");
+						/*List<Instruction> total = tester.symp.satisfyConstraints(envTest, cstr);
+						if(total==null) //unsatisfiable constraints
+							continue;  */
+
+						//String instString = total.Aggregate("",(acc,x)=> acc + x.getName()+"; ").ToString();
+						String[] cstrSplit = cstr.Split(new char[]{'^'});
+						/* Feature computation stage
+                         * - Given envTest, iterator, set of predicates {q} and resultant instruction sequence {i}  
+                         *   1. Mapping Cost (which takes into account 5 features)
+                         *   //2. Instruction prior
+                         *   //3. Verb-Correlation Score
+                         *   //4. Description Length
+                         *   //5. Trimming Cost 
+                         *   6. Sentence Similarity
+                         *   7. Avg. Frequency of predicate skeletal {q}
+                         *   9. Total Frequency of predicate {q,e}  */
+						 
+						double totalScore = history.Item3, mapCost =0,iprCost=0, vcCost=0, dscpCost=0,
+										    trimCost=0, sentenceSim =0, predSkeletalPrior=0, predTotalPrior = 0;
+						mapCost= mappingResult.Item2; //Mapping-Cost
+						iprCost= 0;//weights["w_ipr"] * total.Aggregate(0.0, (sum, n) => sum + this.ftr.getInstructionPrior(n)) / (total.Count() + Constants.epsilon);
+						vcCost= 0;//eights["w_vc"] * this.ftr.getAvgVerbCorrelation(total);
+						dscpCost= 0;//weights["w_dscp"] * total.Aggregate(0.0, (sum, n) => sum + n.norm());
+						trimCost= 0;//weights["w_trim"] * 0;//trim * trim;
+						String sensSimLog = "";
+						if(vt.cls_.sentence!=null && iterator.sentence!=null)
+						{
+							List<String> trainWords = vt.cls_.sentence.Split(new char[]{' '}).Select(x=>x.Trim()).ToList();
+							List<String> testWords = iterator.sentence.Split(new char[]{' '}).Select(x=>x.Trim()).ToList();
+							Tuple<double,string> res = Global.jaccardIndex(trainWords,testWords);
+							sentenceSim = res.Item1;
+							sensSimLog = res.Item2;
+						}
+						else sentenceSim = 0;
+
+						predSkeletalPrior = cstrSplit.Aggregate(0.0,(sum,cstr_) => sum + v.fetchFrequency(cstr_))/(cstrSplit.Length*v.totalFrequency() + Constants.epsilon);
+						predTotalPrior = cstrSplit.Aggregate(0.0,(sum,cstr_) => sum + this.ftr.getPredicateFreq(cstr_))/(cstrSplit.Length*this.ftr.zPredFreq + Constants.epsilon);
+
+						totalScore = totalScore + mapCost + iprCost + vcCost + dscpCost + sentenceSim + 
+							         predSkeletalPrior + trimCost;
+
+						//tester.lg.writeToFile("<br/><b>Instructions</b>: "+instString+"<br/>");
+						tester.lg.writeToFile("Template Count ["+count+"]<ul>"+
+						                      "<li><b>Mapping Score</b> "+mappingResult.Item2+"</li>"+
+						                      /*"<li><b>Instruction Prior</b> "+iprCost+"</li>"+
+						                      "<li><b>Verb-Correlation Score</b> "+vcCost+"</li>"+
+						                      "<li><b>Description Length</b> "+dscpCost+"</li>"+
+						                      "<li><b>Trim Cost</b> "+trimCost+"</li>"+*/
+						                      "<li><b>Sentence Similarity</b> "+sentenceSim+"  ["+sensSimLog+"] </li>"+
+						                      "<li><b>Predicate Skeletal Prior</b> "+predSkeletalPrior+"</li>"+
+						                      "<li><b>Predicate Total Prior</b> "+predTotalPrior+"</li>"+
+						                      "<li><b>Total Score </b> := "+totalScore+"</li></ul>");
+
+						if(totalScore > pivotScore)
+						{
+							pivotScore = totalScore;
+							newConstraints = constraint.ToString();
+						}
+					}
+					constraints.Clear();
+
+					if(newConstraints==null || newConstraints.Equals(iterConstraints))
+						pivotNotFound=false;//pivot has been found
+					else iterConstraints = newConstraints;
+					pivotNotFound = false;
+				}
+
+				if(pivotTotal==null)
+					continue;
+
+
+				count++;
+				#endregion
+			}
+
+			#region GenTemplate
+			/* GEN-Template Stage: Maybe the given templates are all wrong, so we
+			 * create additional template as possible samples. */
+
+			List<String[]> predicates = this.rankPredicateSkeletals (iterator, history.Item1, history.Item2, grounded);
+			String[] cstrSplitGen = predicates.Select(predicate => "(" + predicate[0] +" "+predicate[1]+" "+predicate[2]+ ")").ToArray();/*new String[predicates.Count()];
+			for (int i=0; i<predicates.Count(); i++) 
+				cstrSplitGen[i] = "(" + predicates [i][0] +" "+predicates [i][1]+" "+predicates [i][2]+ ")";*/
+
+			String iterGenCstr = String.Join("^", cstrSplitGen);
+			List<String> genConstraints = new List<String>(){iterGenCstr};
+
+			bool genPivotNotFound = true;
+			List<Instruction> genPivotTotal = null;
+			double genPivotScore = Double.NegativeInfinity;
+
+			while(genPivotNotFound)
+			{
+				List<String> genConstraintsSpace = iterGenCstr.Split(new char[]{'^'}).ToList();
+				for(int leaveOut = 0; leaveOut < genConstraintsSpace.Count(); leaveOut++)
+				{
+					List<String> tmp = genConstraintsSpace.ToList();
+					tmp.RemoveAt(leaveOut);
+					if(tmp.Count()==0)
+						continue;
+					genConstraints.Add(String.Join("^", tmp.ToArray()));
+				}
+
+				if(genConstraints.Count() == 0)
+				{
+					genPivotNotFound=false; 
+					break;
+				}
+
+				String newConstraint = "";
+				foreach(String constraint in genConstraints)
+				{
+					List<Instruction> generatedInst = tester.symp.satisfyConstraints(envTest, constraint);
+					if(generatedInst==null)
+						continue;
+
+					double totalScore = history.Item3;
+
+					/* Feature computation stage
+	                 * - Given envTest, iterator, set of predicates {q} and resultant instruction sequence {i}  
+	                 *   1. Mapping Cost = LE cost + EE cost (at the moment)
+	                 *   2. Instruction prior
+	                 *   3. Verb-Correlation Score
+	                 *   4. Description Length
+	                 *   5. Trimming Cost 
+	                 *   6. Avg. Frequency of predicate skeletal {q} */
+
+					double mapCost =0,iprCost=0, vcCost=0, dscpCost=0, trimCost=0,
+					       predSkeletalPrior=0, predTotalPrior = 0;
+					//computing mapping cost LE + EE (which is 0)
+					double le=0;
+					List<String> objectCover = new List<String>();
+					foreach(Instruction inst in generatedInst)
+						objectCover = objectCover.Union(inst.returnObject()).ToList();
+					foreach(String objName in objectCover)
+					{
+						int j = envTest.objects.FindIndex(x => x.uniqueName.Equals(objName));
+						double lePerObject = 0;
+						for(int i=0; i<leTestCorrMatrix.GetLength(0);i++) 
+						    lePerObject = Math.Max(lePerObject,leTestCorrMatrix[i,j]);
+						le = le + lePerObject;
+					}
+
+					le = le/ (objectCover.Count() + Constants.epsilon);
+					mapCost= weights["w_le"]*le; //the EE cost is 0 as there is no reference
+					iprCost= weights["w_ipr"] * generatedInst.Aggregate(0.0, (sum, n) => sum + this.ftr.getInstructionPrior(n)) / (generatedInst.Count() + Constants.epsilon);
+					vcCost= weights["w_vc"] * this.ftr.getAvgVerbCorrelation(generatedInst);
+					dscpCost= weights["w_dscp"] * generatedInst.Aggregate(0.0, (sum, n) => sum + n.norm());
+
+					trimCost= 0;
+					predSkeletalPrior = 0;//cstrSplitGen.Aggregate(0.0,(sum,cstr_) => sum + v.fetchFrequency(cstr_))/(cstrSplitGen.Length*v.totalFrequency() + Constants.epsilon);
+					predTotalPrior = cstrSplitGen.Aggregate(0.0,(sum,cstr_) => sum + this.ftr.getPredicateFreq(cstr_))/(cstrSplitGen.Length*this.ftr.zPredFreq + Constants.epsilon);
+					totalScore = totalScore + mapCost + iprCost + vcCost + dscpCost + predSkeletalPrior + trimCost;
+
+					String instString = "";
+					foreach(Instruction inst in generatedInst)
+						instString = instString + inst.getName()+"; ";
+					tester.lg.writeToFile("<br/><b>Instructions</b>: "+instString+"<br/>");
+					tester.lg.writeToFile("Template Count ["+count+"]<ul>"+
+					                      "<li><b>Mapping Score</b> "+mapCost+"</li>"+
+					                      "<li><b>Instruction Prior</b> "+iprCost+"</li>"+
+					                      "<li><b>Verb-Correlation Score</b> "+vcCost+"</li>"+
+					                      "<li><b>Description Length</b> "+dscpCost+"</li>"+
+					                      "<li><b>Trim Cost</b> "+trimCost+"</li>"+
+					                      "<li><b>Sentence Similarity</b> 0</li>"+
+					                      "<li><b>Predicate Skeletal Prior</b> "+predSkeletalPrior+"</li>"+
+					                      "<li><b>Predicate Total Prior</b> "+predTotalPrior+"</li>"+
+					                      "<li><b>Total Score </b> = "+totalScore+"</li></ul>");
+
+					if(totalScore > genPivotScore)
+					{
+						genPivotTotal = generatedInst;
+						genPivotScore = totalScore;
+						newConstraint = constraint.ToString();
+					}
+				}
+				genConstraints.Clear();
+				if(newConstraint == null || newConstraint.Equals(iterGenCstr))
+					genPivotNotFound=false;
+				else iterGenCstr = newConstraint;
+			}
+
+			if(genPivotTotal!=null)
+			{
+				List<Instruction> entireGen = history.Item2.ToList().Concat(genPivotTotal).ToList();
+				if (iterator.children == null || iterator.children.Count() == 0)//iterator is a leaf
+				{
+					if (genPivotScore > maxScoreLeaf)
+					{
+						output = entireGen;
+						maxScoreLeaf = genPivotScore;
+					}	
+				}	
+
+				Environment iterEnvGen = tester.sml.executeList(genPivotTotal, envTest);
+				if(unseen)
+				{
+					Instruction marker = new Instruction ();
+					marker.setNameDescription ("$Unseen-Verb "+iterator.verb.getName()+" Count = unseen 0",new List<String>());
+					entireGen.Add(marker);
+				}
+				entryThisClause.Add(new Tuple<Environment, List<Instruction>, double>(iterEnvGen, entireGen, genPivotScore));
+			}
+
+			tester.lg.writeToFile("</div></div>");
+			#endregion
+
+			List<Instruction> entire = history.Item2.ToList().Concat(pivotTotal).ToList();
+
+			if (iterator.children == null || iterator.children.Count() == 0)//iterator is a leaf
+			{
+				if (pivotScore > maxScoreLeaf)
+				{
+					output = entire;
+					maxScoreLeaf = pivotScore;
+				}
+			}
+
+			Environment iterEnv_ = tester.sml.executeList(pivotTotal,envTest);
+			Instruction marker = new Instruction ();
+			marker.setNameDescription ("$Verb "+iterator.verb.getName()+" Count = "+count,new List<String>());
+			entire.Add(marker);
+			entryThisClause.Add(new Tuple<Environment, List<Instruction>, double>(iterEnv_, entire, pivotScore));
+
+
+			if(init == entryThisClause.Count())
+			{
+				Instruction marker = new Instruction ();
+				marker.setNameDescription ("$Stupid Grounding",new List<String>());
+				history.Item2.Add(marker);
+				entryThisClause.Add (history);
+			}
+
+			if (output == null)
+			{
+				output = history.Item2;
+				maxScoreLeaf = history.Item3;
+			}
+			return new Tuple<List<Instruction>, int, double>(output, -1, maxScoreLeaf);
+		}
+

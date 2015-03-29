@@ -1,0 +1,53 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using WordsMatching;
+
+namespace ProjectCompton
+{
+	public enum Solver
+	{
+		InteriorPoint,
+		Simplex
+	}
+
+	public enum CrossValidationScheme
+	{
+		Environment,
+		Task
+	}
+
+    class Constants
+    {
+        /*Class Description : Describes various constants*/
+		internal static string rootPath = "/home/robo328b/dipendra_tellmedave/ProjectCompton/";//@"/home/dipendra/Research/ProjectCompton/";// @"/Users/Ella/Documents/research/ProjectCompton/";
+		internal static string UBLPath = @"/home/robo328b/dipendra_tellmedave/LambdaExpression/";//@"/home/dipendra/Research/verbgrounding/LambdaExpression/";//@"/Users/Ella/Documents/research/verbgrounding/LambdaExpression/";
+		internal static string problemName = "data_Nov-14-2014_1.xml"; //Name of the data file. See ReadMe for details on format
+		internal static string veilFileName = @"VEIL500/" + Constants.problemName;//@"VEIL500/data_May-07-2014_1.xml";
+        internal static string cygwinPath = @"C:/cygwin64/bin/"; //@"/Users/Ella/Documents/research/ProjectCompton/"; //cygwin directory
+        internal static int numScenarios = 2;
+		internal static String[] scenarios = new String[2] { "kitchen", "livingRoom" };
+        internal static bool analyze = false;
+        internal static int numEnvironment = 10;
+        internal static int numDataPerEnvironment = 10;
+        internal static int version = 3;                 //Code version
+        internal static int loggingLevel = 0;            //[-1 : no log, 0 : only important information, 1: all information]
+        internal static bool usingLinux = true;          //Will use different files if OS is Linux if this flag is turned  on. By default the OS is Windows
+        internal static double epsilon = 0.001;          //used to prevent dividing by 0 situation
+
+		//Algorithm Flags
+		internal static Solver method = Solver.InteriorPoint;
+		internal static CrossValidationScheme scheme = CrossValidationScheme.Environment;
+
+        //Cache Flags
+        internal static bool cacheReadQP = false;            //reads solution of QP program from xml file
+		internal static bool cacheWriteQP = false;           //writes solution of QP program into a file
+		internal static bool cacheReadParser = true;         //reads parse output from a parser xml file
+		internal static bool cacheReadUBLParser = true;      //reads UBL parse output from a parser file
+		internal static bool cacheReadWeights = true;        //reads weights from a learning file
+		internal static bool cacheBootStrapPlanOut = true;  //bootstraps the symbolic planner results from cache
+		internal static bool cacheBootStrapSentenceSim = true; //bootstrap sentence similarity
+	}
+}

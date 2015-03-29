@@ -1,0 +1,220 @@
+﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+ * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
+ * working in Cornell Personal Robotics Lab.
+ * 
+ * More details - http://tellmedave.cs.cornell.edu
+ * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
+ */
+
+/*  Notes for future Developers - 
+ *    <no - note >
+ */
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ProjectCompton
+{
+    class Template
+    {
+        /* Class Description : Defines templates which are used by the baselines relying on manually 
+         * constructed templates */
+
+        private String verbName = null;
+        private List<String> variables = null;
+        private List<Instruction> programTemplates = null;
+        private List<Tuple<int, int, String>> relationship = null;
+        private Random rn = null;
+
+        public Template()
+        {
+            /* Constructed Definition : Allocates space for the parameters
+             */
+            variables = new List<string>();
+            programTemplates = new List<Instruction>();
+            relationship = new List<Tuple<int, int, string>>();
+            rn = new Random();            
+        }
+
+        public bool isSameVerb(String verbName)
+        {
+            //Function Description : Returns true if the verb is same
+            return this.verbName.Equals(verbName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public List<Instruction> instantiate(Clause cls, Environment env)
+        {
+            /* Function Description : Uses the given clause and environment to instantiate
+             * the template and returns the instantiate sequence of instructions. The programmer
+             * - Dipendra, wants to specially mention the difficult time he had while coming up 
+             * with instantiation algorithms in general for this work. Its really troublesome to come
+             * up with a systematic way of assigning variables which does so in a satisfactory way. */
+
+            /* Instantiation Algorithm - 
+             * Definition :  Z -> Environment Objects
+             * Proceeds in steps - 
+             * 1. If rel [x y] is one relationship in cls and if rel [a b] is a mapping in 
+             *    the template then assign a->x and y->b
+             * 2. For each variable find set of objects or parts which can be added and assign
+             *    high priority to clause objects and then other objects are assigned randomly
+             */
+
+            List<String> variableCopy = variables.ToList();
+            List<int> blockSet = new List<int>();
+            List<Tuple<String, String>> matching = new List<Tuple<string, string>>(); //variable -> object
+
+            String[,] relation = cls.relation;
+            List<SyntacticTree> nouns =cls.returnNounList();
+            for (int i = 0; i < nouns.Count(); i++)
+            {
+                for (int j = i + 1; j < nouns.Count(); j++)
+                {
+                    if (relation[i, j] != "NONE")
+                    {
+                        //find if similar relation exists for the template
+                        foreach (Tuple<int, int, String> rl in this.relationship)
+                        {
+                            if (rl.Item3.Equals(relation[i, j], StringComparison.OrdinalIgnoreCase) && !blockSet.Contains(rl.Item1) && !blockSet.Contains(rl.Item2))
+                            {
+                                matching.Add(new Tuple<String, String>(variableCopy[rl.Item1], nouns[i].getName()));
+                                matching.Add(new Tuple<String, String>(variableCopy[rl.Item2], nouns[j].getName()));
+                                blockSet.Add(rl.Item1);
+                                blockSet.Add(rl.Item2);
+                            }
+                        }
+                    }
+                }
+            }
+
+            List<String> tmp = new List<string>();
+            for (int i = 0; i < variableCopy.Count(); i++)
+            {
+                if(!blockSet.Contains(i))
+                    tmp.Add(variableCopy[i]);
+            }
+            variableCopy = tmp;
+
+            //Constraint Based Search
+            while (variableCopy.Count() > 0)
+            {
+                //Find Sample Space
+                List<List<String>> varObjSpace = new List<List<String>>();
+                foreach (String variable in variableCopy)
+                {
+                    List<String> varSpace = null;
+                    foreach (Instruction inst in this.programTemplates)
+                    {
+                        List<String> result = inst.possibleObject(variable, env);
+                        varSpace = Global.intersection(varSpace, result);
+                       if (varSpace!=null && varSpace.Count() == 0)
+                       {
+                           ;
+                       }
+                    }
+                    varObjSpace.Add(varSpace);
+                }
+
+                /* Make Optimal Choice and add to matching.
+                 * Score is computed as - 1*each + 1/2* clausalObjects
+                 * but presently just using 1 for each
+                */
+
+                int optimal = -1;
+                double score = Double.PositiveInfinity;
+                for (int i = 0; i < variableCopy.Count(); i++)
+                {
+                    if (score > varObjSpace[i].Count())
+                    {
+                        score = varObjSpace[i].Count();
+                        optimal = i;
+                    }
+                }
+
+                //select one from clause else randomly
+                bool added = false;                
+                List<SyntacticTree> clausalObject=cls.returnNounList();
+                foreach (SyntacticTree nd in clausalObject)
+                {
+                    String name = nd.getName();
+                    if (varObjSpace[optimal].Contains(name))
+                    {
+                        added = true;
+                        matching.Add(new Tuple<string, string>(variableCopy[optimal],name));
+                    }
+                }
+
+                if (!added)
+                {
+                    int rndChoice=this.rn.Next(varObjSpace[optimal].Count());
+                    String name=varObjSpace[optimal][rndChoice];
+                    matching.Add(new Tuple<string, string>(variableCopy[optimal],name)); 
+                }
+
+                //Remove the entry
+                variableCopy.RemoveAt(optimal);
+            }
+
+            //Return the instantiate program
+            List<Instruction> answer = new List<Instruction>();
+            foreach (Instruction inst in this.programTemplates)
+            {
+                Instruction inst_ = inst.makeCopyAndInstantiateTemplate(matching);
+                answer.Add(inst_);
+            }
+            
+            return answer;
+        }
+
+        public void parse(String[] lines, int start, int end, Logger lg)
+        {
+            /* Function Description : Parses the templates from a file. The parsing format is given by - 
+             *
+             * start Verb-Name
+             * parameter : _ _ _ _ _ _ _ 
+             * relationship : rel1 var11 var12 rel2 var21 var22
+             * start+3 Instruction Template 1
+             * start+4 Instruction Template 2
+             * start+5 .... until end which is not included
+             */
+
+            this.verbName = lines[start].Trim();
+            String parameters = lines[start + 1];
+            int colon = parameters.IndexOf(':');
+            String[] variables = parameters.Substring(colon + 1).Split(new char[] { ' ' });
+            for (int i = 0; i < variables.Count(); i++)
+                this.variables.Add(variables[i].Trim());
+            this.variables = Global.removeEmpty_(this.variables);
+
+            String relations = lines[start + 2];
+            colon = relations.IndexOf(':');
+            String[] relationVector = relations.Substring(colon + 1).Split(new char[] { ' ' });
+            relationVector = Global.removeEmpty(relationVector);
+
+            for (int i = 0; i < relationVector.Count(); i = i + 3)
+            {
+                String rel = relationVector[i];
+                String var1 = relationVector[i + 1];
+                String var2 = relationVector[i + 2];
+                int index1 = -1, index2 = -1;
+                for (int j = 0; j < this.variables.Count(); j++)
+                {
+                    if (var1.Equals(this.variables[j], StringComparison.OrdinalIgnoreCase))
+                        index1 = j;
+                    if (var2.Equals(this.variables[j], StringComparison.OrdinalIgnoreCase))
+                        index2 = j;
+                }
+                this.relationship.Add(new Tuple<int, int, string>(index1, index2, rel));
+            }
+
+            for (int i = start + 3; i <= end; i++)
+            {
+                Instruction inst = new Instruction();
+                inst.parse(lines[i], lg);
+                programTemplates.Add(inst);
+            }
+        }
+    }
+}
