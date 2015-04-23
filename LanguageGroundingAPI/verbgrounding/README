@@ -13,3 +13,11 @@ this.path = "/home/robo328b/dipendra_tellmedave/";
 //map it either to the folder containing the dict folder of the WordNet
 Wnlib.WNCommon.path = path + /*"verbgrounding/wordnetdotnet/dict/";*/"dict/";
 //should point to the dict folder of the WordNet
+
+Compile the code
+
+mkbundle -o LanguageGrounding ProjectCompton.exe WordsMatching.dll ./References/Microsoft.Solver.Foundation.dll WordNetClasses.dll
+
+Run the code
+
+./LanguageGrounding
