@@ -1,0 +1,57 @@
+#open the file and create the 2 txt files data_Nov-14-2014_1.xml
+def removeUnecessary(s):
+	'''given <span ..>x</span><span ...>y</span><span ...>z</span>
+           outputs x y z'''
+	s = s.replace("<br>","")
+	g = s.split("<")
+	code = ""
+	for i  in range(0,len(g)):
+		if "meta" in g[i] or "Change of Segment" in g[i] or g[i]=="" or g[i]=="/span>":
+			continue
+		index = g[i].find('>')
+		code = code + g[i][index+1:]+" "
+	return code
+
+def splitAndReturn(text,p):
+	'''splits the text= c1|c2|...|ck'''
+	if text==None :
+		return [""]
+	text = text.replace("\n","")
+	if p=="inst":
+		index = text.find("<br/>")
+		if not index == -1:
+			text = text[0:index-1]
+	s = []
+	if p=="inst":
+		s = text.split('<span class="instruction">Change of Segment</span>')
+	else:
+		s = text.split('|')
+	data = []
+	for i in range(0,len(s)):
+		if p=="inst":
+			s[i] = removeUnecessary(s[i])
+		else:
+			s[i] = s[i].replace(".","").strip()
+		data.append(s[i].rstrip())
+	return data
+
+import xml.etree.ElementTree as ET
+tree = ET.parse('../ProjectCompton/VEIL500/data_Nov-14-2014_1.xml')
+f = open('../english.txt','w')
+g = open('../code.txt','w')
+root = tree.getroot()
+l = 0
+for country in root.findall('point'):
+	#each point
+	data1 = splitAndReturn(country.find('sentence').text, "sen")
+	data2 = splitAndReturn(country.find('instruction').text, "inst")
+	for j in range(0,min(len(data1),len(data2))):
+		if not (len(data1[j])==0 or len(data2[j])==0  or data2[j]=="$$"):
+			l = l +1
+			print "Writing line "+str(l)
+			f.write(data1[j]+"\n\n")
+			g.write(data2[j]+"\n\n")
+print l
+f.close()
+g.close()
+

@@ -1,0 +1,7 @@
+
+            //List<double[]> weightQueue = new List<double[]>() { new double[13] { 60, 40, 2, -0.01, -10, -1, 5, 40, 130, 30, 0, 0, 0 } }; // Full Model
+            List<double[]> weightQueue = new List<double[]>() { new double[13] { 10, 40, 2, -0.01, -10, 0, 5, 40, 130, 30, 0, 100, 0 } }; //Full Model
+            //List<double[]> weightQueue = new List<double[]>() { new double[13] { 0, 40, 2, -0.01, -10, 0, 5, 40, 130, 30, 0, 100, 0 } }; //No Domain
+            //List<double[]> weightQueue = new List<double[]>() { new double[13] { 10, 0, 2, -0.01, -10, 0, 0, 0, 0, 0, 0, 0, 0 } }; No NL
+            //List<double[]> weightQueue = new List<double[]>() { new double[6] { 10, -5, 1, 0, -8, 100} };   // Used by tree exploration
+            //List<int> beliefVector = new List<int>() {1,5,9,12};

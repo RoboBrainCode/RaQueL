@@ -1,0 +1,1992 @@
+﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+ * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
+ * working in Cornell Personal Robotics Lab.
+ * 
+ * More details - http://tellmedave.cs.cornell.edu
+ * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
+ */
+
+/*  Notes for future Developers - 
+ *    <no - note >
+ */
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Xml;
+using System.Diagnostics;
+using WordsMatching;
+
+namespace ProjectCompton
+{
+    class Inference
+    {
+        /* Class Description: The aim of this class is to provide several inference strategies
+         * for the main algorithm. This also includes interface for inference moves
+         * */
+        private Logger lg = null;
+        private List<VerbProgram> veil = null;
+        private List<Environment> envList = null;
+        private Features ftr = null;
+        //private Double[] weights_opt = new double[13] { 10, 40, 2, -0.01, -10, 0, 5, 40, 130, 30, 0, 100, 0 };//null; // Weights used by the algorithm
+        //private Dictionary<String, Double> weightsMainModel = new Dictionary<string, double>();
+        //public int numFeatureMainModel = 9;
+        private Parser obj = null;  // Parser objec
+        //private int numFeature_opt = 13; //Number of Features to be used by the algorithm
+        private Random rnd = null;  //Random Number Generator
+        private SymbolicPlanner symp = null;
+        private Simulator sml = null;
+        private Learning lrn = null;
+        private List<Tuple<Environment, Environment, double>> distanceMatrix = new List<Tuple<Environment, Environment, double>>();
+		private SentenceSimilarity sensim = null;
+        private System.IO.StreamWriter cacheQP = null;
+        private XmlTextReader readQP = null;
+	
+        public Features ftr_
+        {
+            get
+            {
+                return this.ftr;
+            }
+        }
+
+        public Inference(Logger lg, Simulator sml, SymbolicPlanner symp, List<VerbProgram> veil, List<Environment> envList, Parser obj, Features ftr)
+        {
+            this.lg = lg;
+            this.veil = veil;
+            this.envList = envList;
+            this.ftr = ftr;
+            this.obj = obj;
+			this.symp = symp;
+            this.rnd = new Random();
+            this.sml = sml;
+			this.sensim = new SentenceSimilarity ();
+            if (Constants.cacheReadQP)
+                this.readQP = new XmlTextReader(Constants.rootPath + "Log/QP.xml");
+            if(Constants.cacheWriteQP)
+            {
+                this.cacheQP = new System.IO.StreamWriter(Constants.rootPath + "Log/QP.xml");
+                this.cacheQP.WriteLine("<QP>");
+            }
+			if (Constants.cacheBootStrapSentenceSim)
+				this.sensim.bootStrapCache ();
+			Console.WriteLine ("Sentence Simiarity Cache Hit " + this.sensim.cacheHit / (this.sensim.cacheHit + this.sensim.cacheMiss + Constants.epsilon));
+			this.lg.writeToFile ("Sentence Simiarity Cache Hit " + this.sensim.cacheHit / (this.sensim.cacheHit + this.sensim.cacheMiss + Constants.epsilon));
+        }
+
+		public Dictionary<String,Double> initDict(double[] weights)
+		{
+			//Function Description: Returns the dictionary bootstrapped with weights
+			Dictionary<String,Double> dict = new Dictionary<String,Double> ();
+			for (int i=0; i<Features.feature4.Count(); i++)
+				dict.Add (Features.feature4 [i], weights [i]);
+			return dict;
+		}
+
+        public void close()
+        {
+            //Function Description: Performs action as if this constructor is never going to be called again
+            if (Constants.cacheWriteQP)
+            {
+                this.cacheQP.WriteLine("</QP>");
+                this.cacheQP.Flush();
+                this.cacheQP.Close();
+            }
+           if(Constants.cacheReadQP)
+				this.readQP.Close();
+			this.sensim.storeCache ();
+        }
+		
+        public Tuple<Clause, List<Instruction>, Environment> trimItDown(Tuple<Clause, List<Instruction>, Environment> orig, int trim)
+        {
+            /* Function Description : Trim down the program from begining to depth of trim */
+            List<Instruction> newInst = new List<Instruction>();
+            for (int i = trim; i < orig.Item2.Count(); i++)
+                newInst.Add(orig.Item2[i]);
+
+            //Change the environment as well
+            Environment iterator = orig.Item3.makeCopy();
+            for (int i = 0; i < trim; i++)
+            {
+                Instruction inst = orig.Item2[i];
+                inst = inst.makeCopyAndRevert();
+                iterator = this.sml.execute(inst, iterator);
+            }
+
+            //copy the clause
+            Clause cls = new Clause();
+            cls = orig.Item1.makeCopy();
+
+            return new Tuple<Clause, List<Instruction>, Environment>(cls, newInst, iterator);
+        }
+
+        public VeilTemplate trimItDown(VeilTemplate orig, int trim)
+        {
+            /* Function Description : Trim down the program from begining to depth of trim */
+            List<Instruction> newInst = new List<Instruction>();
+            for (int i = trim; i < orig.instOld.Count(); i++)
+            {
+                Instruction nw = orig.instOld[i].makeCopy();
+                newInst.Add(nw);
+            }
+
+            foreach (Instruction itmp in newInst)
+            {
+                foreach (String dscp in itmp.getDescription())
+                {
+                    if (dscp[0] == '$')
+                        throw new ApplicationException("Generalized Variables Exist");
+                }
+            }
+
+            //Change the environment as well
+			Environment iterator = orig.env_.makeCopy();
+            for (int i = 0; i < trim; i++)
+            {
+                Instruction inst = orig.instOld[i];
+                iterator = this.sml.execute(inst, iterator);
+            }
+
+            Clause cls = orig.cls_.makeCopy(); //copy the clause
+            VeilTemplate trimmedDown = new VeilTemplate(cls, newInst, iterator, -1, this.sml);
+            return trimmedDown;
+        }
+
+        public List<Instruction> instantiate(VeilTemplate eq, Clause cl, List<Tuple<String, String>> matchList)
+        {
+            /* To-Do */
+            return null;
+        }
+
+        public List<Instruction> resetInstantiate(VeilTemplate eq)
+        {
+            /* To-Do */
+            return null;
+        }
+
+        public List<Instruction> instantiation(VeilTemplate eq, int[] mapping, Environment envTest)
+        {
+            /* Function Description: Apply the mapping on the template and return
+             * the instantiated instruction sequence */
+
+            List<Instruction> insts = eq.inst_.ToList();
+            List<Instruction> instant = new List<Instruction>();
+            List<String> variables = eq.var_;
+			List<Object> objList = envTest.objects;
+
+            foreach (Instruction inst in insts)
+            {
+                List<String> description = inst.getDescription();
+                List<String> newDescription = new List<String>();
+
+                foreach (String dscp in description)
+                {
+                    bool added = false;
+                    for (int i = 0; i < variables.Count(); i++)
+                    {
+                        if (dscp.Equals(variables[i]))
+                        {
+                            added = true;
+                            newDescription.Add(objList[mapping[i]].uniqueName);
+                            break;
+                        }
+                    }
+                    if (!added)
+                        newDescription.Add(dscp); //keep it same
+                }
+                Instruction instNew = new Instruction(inst.getControllerFunction(), newDescription);
+                instant.Add(instNew);
+            }
+
+            return instant;
+        }
+
+		public List<String> instantiatePredicates(VeilTemplate vt, int[] mapping, Environment envTest)
+		{
+			/* Function Description: Takes a set of predicates [predicate] and mapping of the parameters to envTest
+			 * and returns the instantiated predicates */
+			List<String> instantiated = new List<String> ();
+			List<Object> objList = envTest.objects;
+			List<String> variables = vt.zVariablePredicatePost;
+			foreach (String predicate in vt.predicatesPost) 
+			{
+				Tuple<bool,string> predicate_ = Global.getAtomic(predicate);
+				String[] words = predicate_.Item2.Split (new char[]{' '});
+				for(int i=0; i<words.Length;i++)
+				{
+					for (int v = 0; v < variables.Count(); v++)
+					{
+						if (words[i].Equals(variables[v]))
+							words[i] = objList[mapping[v]].uniqueName;
+					}
+				}
+				String instantiatedPred = "("+string.Join (" ", words)+")";
+				if (predicate_.Item1)
+					instantiatedPred = "(not " + instantiatedPred + ")";
+				instantiated.Add (instantiatedPred);
+			}
+			return instantiated;
+		}
+
+        public Tuple<int[], Double> fetchMapFromCache()
+        {
+            /* Function Description: Cache has data in the format - 
+               <QP>
+             *  <pt><map>a1 a2 a3 ... </map><score>...</score></pt>
+             *  .....
+             * </QP>
+             **/
+            int[] map = null;
+            while (this.readQP.Read())
+            {
+                switch (this.readQP.NodeType)
+                {
+                    case XmlNodeType.Text: //Display the text in each element.
+                        if (map == null)
+                            map = Global.stringToArray(this.readQP.Value);
+                        else return new Tuple<int[], double>(map,Double.Parse(this.readQP.Value));
+                        break;
+                }
+            }
+
+            throw new ApplicationException("Asking from Cache where None exists");
+        }
+
+        public List<Tuple<String, String>> mapping(VeilTemplate eq, Clause clTest)
+        {
+            //Old Mapping. For temporary reasons
+            return null;
+        }
+
+		public Tuple<int[], Double> mapping(VeilTemplate vtmp, Clause clTest, Environment envTest, Dictionary<String, Double> weights, bool usePredicates)
+        {
+            /* Function Description: Finds a 'good' mapping from variables in eq to objects in envTest.
+             * This is done by converting it into a queadratic optimization problem with convex hull 
+             * domain. Third-party softwares are used to solve this optimization then. 
+             * There are 5-type of features responsible for this mapping - 
+             * 1. Map objects that they are similar to previously mapped one
+             *    \sum_{ij} w_{ee} C^1_{ij} x_{ij}
+             *    C^1_{ij} = \sigma_{EE_v} [\xi_v(z_i),j] --- coefficient of env-env correlation
+             *    
+             * 2. Map objects that have similar spatial relation between objects
+             *    \sum_{i_1j_2, i_2j_2} w_{se} C^2_{i_1j_2, i_2j_2} x_{i_1j_1} x_{i_2j_2}
+             *    C^2_{i_1j_2, i_2j_2} = 1{\gamma^v_{ij} = \gamma_{kl}} --- coefficient of spatial-relation of environment
+             * 
+             * 3. Map objects that use maximum from language 𝐿
+             *    \sum_{ij} w_{le} C^3_{j} x_{ij} 
+             *    C^3_{j} = max_k {\sigma_{LE}[k,j]} --- coefficient of language-environment correlation
+             *    
+             * 4. Map objects that have strong language correlation 
+             *    \sum_{ij} w_{ll} C^4_{ij} x_{ij}
+             *    C^4_{ij} = max_{p,q} { \sigma_{L_vE_v}[p,\xi_v(i)]\sigma_{L_vL}[p,q,]\sigma_{LE}[q,j]} --- coefficient of language-language correlation
+             * 
+             * 5. Map objects that have similar spatial relation between their mapped language
+             *   \sum_{i_1j_1,i_2j_2} w_{sl} C^5_{i_1j_1,i_2j_2} x_{i_1j_1} x_{i_2j_2}
+             *    C^5_{i_1j_1,i_2j_2} = max_{p_1,q_1,p_2,q_2} 1{\rho_v[p_1,q_1] = \rho[p_2,q_2]}
+             *                        \sigma_{L_vE_v}[p_1,\xi_v(i_1)] \sigma_{L_vL}[p_1,q_1] \sigma_{LE}[q_1,j_1]
+             *                        \sigma_{L_vE_v}[p_2,\xi_v(i_2)] \sigma_{L_vL}[p_2,q_2] \sigma_{LE}[q_2,j_2]                      
+             *   
+             *  Quadratic Cost function can then be written as - \sum_{ij} a_{ij}x_{ij} + \sum_{i_1j_1,i_2j_2} b_{i_1j_2,i_2j_2}x_{i_1j_1}x_{i_2j_2}
+             *       a_{ij} = w_{ee}C^1{ij} + w_{le} C^3_{j} + w_{ll}C^4_{ij}
+             *       b_{i_1j_1,i_2j_2} = w_{se} C^2_{i_1j_2, i_2j_2} + w_{sl} C^5_{i_1j_1,i_2j_2}
+             */
+
+            if (Constants.cacheReadQP)
+                return this.fetchMapFromCache();
+
+            int lngTestN = clTest.lngObj.Count(), lngTrainN = vtmp.cls_.lngObj.Count(),
+                envTestN = envTest.numObjects(),  envTrainN = vtmp.env_.numObjects(), z = vtmp.numVariables(usePredicates);
+
+			if (z == 0)
+				return new Tuple<int[], double> (new int[0], 0);
+
+            double[,] eeCorrMatrix = vtmp.env_.getEnvCorrMatrix(envTest); //E-E correlation Matrix. Its in general asymmteric
+            double[,] llCorrMatrix = vtmp.cls_.getLngCorrMatrix(clTest, this.sensim);  //L-L correlation Matrix. Its Symmetric
+			double[,] leTestCorrMatrix = envTest.getLECorrMatrix(clTest, this.sensim), leTrainCorrMatrix = vtmp.env_.getLECorrMatrix(vtmp.cls_, this.sensim); //L-E correlation Matrix.
+			/*int mug = -1, kettle = -1;
+			for (int i=0; i<envTest.objects.Count(); i++) {
+				if (envTest.objects [i].uniqueName.Equals ("Mug_1"))
+					mug = i;
+				if (envTest.objects [i].uniqueName.Equals ("Kettle"))
+					kettle = i;
+			}
+			double a1 = leTestCorrMatrix[0,mug], b1 = leTestCorrMatrix[0,kettle];
+			Console.WriteLine ("coffee-mug "+a1+" coffee-kettle "+b1); */
+            //Naming Convention - x_{ij} \in {0,1} and ij is represented in row-major format
+            double[] c1 = new double[z * envTestN];
+            //double[,] c2 = new double[z * envTestN, z * envTestN];
+            double[] c3 = new double[envTestN];
+            double[] c4 = new double[z * envTestN];
+            //double[,] c5 = new double[z * envTestN, z * envTestN];
+            double[] a = new double[z * envTestN];
+            double[,] b = new double[z * envTestN, z * envTestN];
+
+            #region computing_coefficients
+            //Computing Coefficient C1
+            for (int i = 0; i < z; i++)
+            {
+                for (int j = 0; j < envTestN; j++)
+                    c1[i * envTestN + j] = eeCorrMatrix[vtmp.getOrigObject(i,usePredicates), j];
+            }
+
+            //Computing Coefficient C2
+            /*for (int i1 = 0; i1 < z; i1++)
+            {
+                for (int i2 = i1; i2 < z; i2++)
+                {
+                    for (int j1 = 0; j1 < envTestN; j1++)
+                    {
+                        for (int j2 = j1; j2 < envTestN; j2++)
+                        {
+                            if (eq.env_.getRelationship(eq.getOrigObject(i1), eq.getOrigObject(i2)) == envTest.getRelationship(j1, j2))
+                                c2[i2 * envTestN + j2, i1 * envTestN + j1] = c2[i1 * envTestN + j1, i2 * envTestN + j2] = 1;
+                            else c2[i2 * envTestN + j2, i1 * envTestN + j1] = c2[i1 * envTestN + j1, i2 * envTestN + j2] = 0;
+                        }
+                    }
+                }
+            }*/
+
+            //Computing Coefficient C3
+            for (int j = 0; j < envTestN; j++)
+            {
+                c3[j] = 0;
+                for (int k = 0; k < lngTestN; k++)
+                    c3[j] = Math.Max(c3[j], leTestCorrMatrix[k, j]);
+            }
+
+            //Computing Coefficient C4
+            for (int i = 0; i < z; i++)
+            {
+                for (int j = 0; j < envTestN; j++)
+                {
+                    c4[i * envTestN + j] = 0;
+                    for (int p = 0; p < lngTrainN; p++)
+                    {
+                        for (int q = 0; q < lngTestN; q++)
+                        {
+                            double newSample = leTrainCorrMatrix[p, vtmp.getOrigObject(i,usePredicates)] * llCorrMatrix[p, q] * leTestCorrMatrix[q, j];
+                            c4[i * envTestN + j] = Math.Max(c4[i * envTestN + j], newSample);
+                        }
+                    }
+                }
+            }
+
+            //Computing Coefficient C5
+            /*for (int i1 = 0; i1 < z; i1++)
+            {
+                for (int i2 = i1; i2 < z; i2++)
+                {
+                    for (int j1 = 0; j1 < envTestN; j1++)
+                    {
+                        for (int j2 = j1; j2 < envTestN; j2++)
+                        {
+                            c5[i1 * envTestN + j1, i2 * envTestN + j2] = 0;
+                            for (int p1 = 0; p1 < lngTrainN; p1++)
+                            {
+                                for (int p2 = 0; p2 < lngTrainN; p2++)
+                                {
+                                    for (int q1 = 0; q1 < lngTestN; q1++)
+                                    {
+                                        for (int q2 = 0; q2 < lngTestN; q2++)
+                                        {
+                                            double newSample = 0;
+                                            if (eq.cls_.relation[p1, p2] == clTest.relation[q1, q2])
+                                            {
+                                                newSample = leTrainCorrMatrix[p1, eq.getOrigObject(i1)] * llCorrMatrix[p1, q1] * leTestCorrMatrix[q1, j1];
+                                                newSample = newSample * leTrainCorrMatrix[p2, eq.getOrigObject(i2)] * llCorrMatrix[p2, q2] * leTestCorrMatrix[q2, j2];
+                                            }
+                                            c5[i1 * envTestN + j1, i2 * envTestN + j2] = Math.Max(c5[i1 * envTestN + j1, i2 * envTestN + j2], newSample);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }*/
+
+            //Computing a vector
+            for (int i = 0; i < z; i++)
+            {
+                for (int j = 0; j < envTestN; j++)
+					a[i * envTestN + j] = weights["w_ee"] * c1[i * envTestN + j] + weights["w_le"] * c3[j] + weights["w_ll"] * c4[i * envTestN + j];
+            }
+
+            //Computing b matrix
+            /*for (int i1 = 0; i1 < z; i1++)
+            {
+                for (int i2 = i1; i2 < z; i2++)
+                {
+                    for (int j1 = 0; j1 < envTestN; j1++)
+                    {
+                        for (int j2 = 0; j2 < envTestN; j2++)
+                        {
+                            b[i1 * envTestN + j1, i2 * envTestN + j2] = this.weightsMainModel["w_se"] * c2[i1 * envTestN + j1, i2 * envTestN + j2] +
+                                                                        this.weightsMainModel["w_sl"] * c5[i1 * envTestN + j1, i2 * envTestN + j2];
+                        }
+                    }
+                }
+            }*/
+            #endregion
+
+
+            #region computing_constraints
+            /* There are three types of constraints - 
+             * 1. x_{ij} \in {0,1} \forall_ij 
+             *    after relaxation x_{ij} >= 0 and -x_{ij} >= -1 that is 2*z*envTestN constraints
+             * 2. \sum_j x_{ij} = 1 \forall_i that is  constraints
+             *    after relaxation \sum_j x_{ij} >= 1 and \sum_j -x_{ij} >= -1 that is 2*z constraints
+             * 3. [If using Sequence]
+             *    Some variables can only be mapped to instances where the instruction can be executed
+             *    for example if variable $1 appears in instruction grasp $1 then $1 can be mapped only
+             *    graspable objects. The algorithm for doing this is as follows - 
+             *    1. foreach generalized dscp $v in each instruction i \in I
+             *    2.     find constraints due to i on $v as follows
+             *    2.1                find {predicates} in preconditions and effects of the type
+             *                           {affordance-type $v, state $v state-name}
+             *    2.2              - for {affordance-type $v} add x_{vj} >=0 and -x_{vj} >= 0
+             *                        for every object j that does not have that affordance
+             *                     - for {state $1 state-name} add x_{vj} >=0 and -x_{vj} >=0
+             *                        for every object j that does not have the given state    
+             * 4. [If using Predicate]
+             *    4.1 Some variables can e.g. (state $1 state-name) then $1 can only map to objects
+             *        such that it has the given state-name
+             *    4.2 Some variable have constraints from relationship e.g. (Grasping $1 $2) then $1
+             *        has to be an object that can grasp such as Robot
+             */
+
+            List<double[]> constraints_ = new List<double[]>();
+            List<double> lower_ = new List<double>();
+
+            //double[,] constraints = new double[2 * z * envTestN + 2 * z, z * envTestN];
+            
+            //double[] lower = new double[2 * z * envTestN + 2 * z];
+            //Constraint 1 after relaxation becomes - x_{ij} >=0 and -x_{ij} >= -1
+
+            for (int cstr = 0; cstr < z * envTestN; cstr++)
+            {
+                double[] l = new double[z * envTestN];
+                double[] u = new double[z * envTestN];
+                for (int k = 0; k < z * envTestN; k++)
+                {
+                    l[k] = 0;
+                    u[k] = 0;
+                }
+                l[cstr] = 1; //x_{ij}
+                u[cstr] = -1; //-x_{ij}
+                constraints_.Add(l);
+                constraints_.Add(u);
+                lower_.Add(0); //x_{ij} > =0
+                lower_.Add(-1); //-x_{ij} >= -1
+            }
+
+            //Constraint 2 \sum_j x_{ij} = 1
+            for (int cstr = 0; cstr < z; cstr++)
+            {
+                double[] l = new double[z * envTestN];
+                double[] u = new double[z * envTestN];
+                for (int i = 0; i < z; i++)
+                {
+                    for (int j = 0; j < envTestN; j++)
+                    {
+                        if (i == cstr)
+                        {
+                            l[i * envTestN + j] = 1;
+                            u[i * envTestN + j] = -1;
+                        }
+                        else
+                        {
+                            l[i * envTestN + j] = 0;
+                            u[i * envTestN + j] = 0;
+                        }
+                    }
+                }
+
+                constraints_.Add(l);
+                constraints_.Add(u);
+                lower_.Add(1); //\sum_{j} x_{ij} >= 1
+                lower_.Add(-1); //\sum_{j} -x_{ij} >= -1
+            }
+
+            //Constraint 3 : Semantic Restrictions
+			List<Object> objL=envTest.objects;
+            for (int i = 0; i < z; i++) //for each generalized variable
+            {
+              	if(usePredicates)
+				{
+					List<String> predicates = vtmp.predicatesPost; //find all predicates containing zth variable
+					foreach(String predicate_ in predicates)
+					{
+						String predicate = Global.getAtomic(predicate_).Item2;
+						String[] words=predicate.Split(new char[]{' '});
+						if(words[0].Equals("state") && words[1].Equals(vtmp.zVariablePredicatePost[i]))
+						{
+							bool feasible=false;
+							for(int j=0; j<envTestN;j++)
+							{
+								if(!objL[j].ifStateExist(words[2]))//state-name is words[2]
+								{
+									//add the constraint - x_{ij} >= 0 and -x_{ij} >= 0
+									double[] l = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+									double[] u = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+									l[i*envTestN+j]=1;
+									u[i*envTestN+j]=-1;
+									constraints_.Add(l);
+									constraints_.Add(u);
+									lower_.Add(0); //x_{ij} >= 0
+									lower_.Add(0); //-x_{ij} >= 0
+								}
+								else feasible=true;
+							}
+							if(!feasible) //the solution cannot be solved since this variable can never be satisfied
+								return null;
+						}
+						else if((words[0].Equals("Grasping")||words[0].Equals("Near")) && words[1].Equals(vtmp.zVariablePredicatePost[i]))
+						{
+							for(int j=0; j<envTestN;j++)
+							{
+								if(!objL[j].uniqueName.Equals("Robot"))
+								{
+									//add the constraint - x_{ij} >= 0 and -x_{ij} >= 0
+									double[] l = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+									double[] u = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+									l[i*envTestN+j]=1;
+									u[i*envTestN+j]=-1;
+									constraints_.Add(l);
+									constraints_.Add(u);
+									lower_.Add(0); //x_{ij} >= 0
+									lower_.Add(0); //-x_{ij} >= 0
+								}
+							}
+						}
+						else if(words[0].Equals("Grasping") && words[2].Equals(vtmp.zVariablePredicatePost[i]))
+						{
+							for(int j=0; j<envTestN;j++)
+							{
+								if(!objL[j].affordances_.Contains("IsGraspable"))
+								{
+									//add the constraint - x_{ij} >= 0 and -x_{ij} >= 0
+									double[] l = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+									double[] u = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+									l[i*envTestN+j]=1;
+									u[i*envTestN+j]=-1;
+									constraints_.Add(l);
+									constraints_.Add(u);
+									lower_.Add(0); //x_{ij} >= 0
+									lower_.Add(0); //-x_{ij} >= 0
+								}
+							}
+						}
+					}
+				}
+				else
+				{
+					List<String> affordanceRestriction = new List<String>(); //set of affordances that $i must satisfy
+					List<String> specialObj = null; //special objects
+	                foreach (Instruction inst_ in vtmp.inst_)
+	                {
+						List<String> descriptions = inst_.getDescription();
+						for(int which=0; which<descriptions.Count();which++)//each(String dscp  in inst_.getDescription())
+						{
+							if(descriptions[which].Equals(vtmp.var_[i]))
+							{
+								affordanceRestriction = affordanceRestriction.Union(this.sml.getAffordance(inst_,which)).ToList();
+								List<String> sobj = this.sml.getSpecialObj(inst_,which);
+								if(specialObj == null)
+									specialObj = sobj;
+								else if(sobj!=null)
+									specialObj = specialObj.Intersect(sobj).ToList();
+							}
+						}
+	                }
+
+					//add the constraint
+					foreach(String affordanceString in affordanceRestriction)
+					{
+						//cst is of the type: affordance-type | special-object ---
+						String affordance=affordanceString.Split(new char[]{' '})[0].ToString().Trim();
+						bool feasible=false;
+						for(int j=0; j<envTestN;j++)
+						{
+							if(!objL[j].affordances_.Contains(affordance))
+							{
+								//add the constraint - x_{ij} >= 0 and -x_{ij} >= 0
+								double[] l = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+								double[] u = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+								l[i*envTestN+j]=1;
+								u[i*envTestN+j]=-1;
+								constraints_.Add(l);
+								constraints_.Add(u);
+								lower_.Add(0); //x_{ij} >= 0
+								lower_.Add(0); //-x_{ij} >= 0
+							}
+							else feasible=true;
+						}
+						if(!feasible) //the solution cannot be solved since this variable can never be satisfied
+							return null;
+					}
+
+					if(specialObj!=null)
+					{
+						bool feasible=false;
+						for(int j=0; j<envTestN;j++)
+						{
+							if(!specialObj.Contains(objL[j].uniqueName))
+							{
+								//add the constraint - x_{ij} >= 0 and -x_{ij} >= 0
+								double[] l = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+								double[] u = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+								l[i*envTestN+j]=1;
+								u[i*envTestN+j]=-1;
+								constraints_.Add(l);
+								constraints_.Add(u);
+								lower_.Add(0); //x_{ij} >= 0
+								lower_.Add(0); //-x_{ij} >= 0
+							}
+							else feasible=true;
+						}
+						if(!feasible)
+							return null;
+					}
+				}
+            }
+
+			/* Adding restrictions that different variables cannot take the same value
+             * there is no reason why it should always be the case but it looks like it
+             * happens in most of the cases 
+			 * Constraints 4: \forall_i \ne j,k  - x_ik - x_jk >= -1
+			 */
+
+			for(int i=0; i<z;i++)
+			{
+				for(int j=i+1; j<z;j++)
+				{
+					for(int k=0; k<envTestN;k++)
+					{
+						double[] l = Enumerable.Repeat(0.0,z*envTestN).ToArray();
+						l[i*envTestN+k]=-1;
+						l[j*envTestN+k]=-1;
+						constraints_.Add(l); //- x_ik - x_jk >= -1
+						lower_.Add(-1); //- x_ik - x_jk >= -1
+					}
+				}
+			}
+            #endregion
+            
+            #region solving_QP
+            QPSolver qps = new QPSolver(a, b, constraints_, lower_);
+            Tuple<double[], double> res = qps.solve();
+            qps.destroy();
+            double[] map = res.Item1;
+            #endregion
+
+            #region discretize
+            int[] map_ = new int[z];
+            /* Discretization algorithm - for every i let j_ = argmax_j x_ij 
+             * make x_ij\_ = 1 and for all j make x_ij = 0*/
+            for (int i = 0; i < z; i++)
+            {
+                int j_ = 0;
+                for (int j = 1; j < envTestN; j++)
+                {
+                    if (map[i * envTestN + j] > map[i * envTestN + j_])
+                        j_ = j;
+                }
+                map_[i] = j_;
+            }
+
+			//if two variables get mapped to same object then write the xij
+			for(int i=0; i<z;i++)
+			{
+				for(int k=i+1; k<z;k++)
+				{
+					if(map_[i]==map_[k])
+					{
+						int j = map_[i];
+						this.lg.writeToFile("Variable "+i+", "+k+" mapped to "+envTest.objects[j].uniqueName+" with cost "+map[i * envTestN + j]+" and "+map[k * envTestN + j]);
+					}
+				}
+			}
+
+            #endregion
+
+            //Store in Cache
+			if (Constants.cacheWriteQP) 
+			{
+				this.cacheQP.WriteLine ("<pt><map>" + Global.arrayToString (map_) + "</map><score>" + res.Item2 + "</score></pt>");
+				this.cacheQP.Flush ();
+			}
+			return new Tuple<int[], double> (map_, res.Item2 / (z * envTestN + Constants.epsilon));
+        }
+
+        public double getDistance(Environment env1, Environment env2)
+        {
+            /*Function Description : Finds the distance between the environment if not already stored
+             * or just outputs the stored distance. The computed distance is then stored.*/
+            foreach (Tuple<Environment, Environment, double> tmp in this.distanceMatrix)
+            {
+                if (tmp.Item1 == env1 && tmp.Item2 == env2 || tmp.Item1 == env2 && tmp.Item2 == env1)
+                {
+                    return tmp.Item3;
+                }
+            }
+            double distance = env1.distance(env2);
+            distanceMatrix.Add(new Tuple<Environment, Environment, double>(env1, env2, distance));
+            return distance;
+        }
+
+        public List<Tuple<Object, String, String, int>> createTableOfStates(Clause cl, Environment env, List<VeilTemplate> programs)
+        {
+            /* Function Description : Given a clause cl and list of program instances, 
+             * corresponding to some verb. This function returns a table of the form 
+             *    [Object : Object , State : String, Value : Double]
+             */
+            List<Tuple<Object, String, String, int>> stateTable = new List<Tuple<Object, String, String, int>>();
+            Environment[] endEnvList = new Environment[programs.Count()];
+
+            for (int i = 0; i < programs.Count(); i++)
+            {
+                //finds last environment for every env in the list
+				Environment current = programs [i].env_.makeCopy ();
+                foreach (Instruction inst in programs[i].inst_)
+                {
+                    Instruction instNew = inst.makeCopyAndRevert();
+                    current = this.sml.execute(instNew, current);
+                }
+                endEnvList[i] = current;
+            }
+
+            for (int i = 0; i < programs.Count(); i++)
+            {
+                List<Tuple<String, String>> matchedObjects = this.mapping(programs[i], cl);  //first item is from program
+                foreach (Tuple<String, String> tmp in matchedObjects)
+                {
+                    //tmp.Item2 has to be from cl to continue
+                    if (cl.ifExists(tmp.Item2))
+                    {
+                        Object obj1 = env.findObject(tmp.Item2);
+                        //search for tmp.Item1 in endEnvList[i]
+                        Object obj2 = endEnvList[i].findObject(tmp.Item1);
+                        /* iterate over states of obj and store it in the table if they are 
+                           also states of obj1*/
+                        List<Tuple<String, String>> newlyFoundStateList = obj2.getState();
+                        foreach (Tuple<String, String> single in newlyFoundStateList)
+                        {
+                            if (obj1.getStateValue(single.Item1).Count() > 0)
+                            {
+                                //add to the table
+                                bool added = false;
+                                for (int iter = 0; iter < stateTable.Count(); iter++)
+                                {
+                                    if (stateTable[iter].Item1.getName().Equals(obj1.getName(), StringComparison.OrdinalIgnoreCase) &&
+                                        stateTable[iter].Item2.Equals(single.Item1, StringComparison.OrdinalIgnoreCase) &&
+                                        stateTable[iter].Item3.Equals(single.Item2, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        stateTable[iter] = new Tuple<Object, string, string, int>(stateTable[iter].Item1, stateTable[iter].Item2, stateTable[iter].Item3, stateTable[iter].Item4 + 1);
+                                    }
+                                    added = true;
+                                }
+                                if (!added)
+                                {
+                                    stateTable.Add(new Tuple<Object, string, string, int>(obj1, single.Item1, single.Item2, 1));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return stateTable;
+        }
+
+		public List<String[]> initPredicate(Environment env, List<String> objects)
+		{
+			//Function Description: initial Predicates 
+			List<String[]> predicates = new List<String[]> ();
+			foreach (Object obj in env.objects) 
+			{
+				List<Tuple<String,String>> stval = obj.getState ();
+				foreach (Tuple<String,String> st in stval)
+				{
+					if (st.Item1.Equals ("Color"))
+						continue;
+					if(env.isSastified("state "+obj.uniqueName+" "+st.Item1)==0)
+						predicates.Add (new string[3] { "state", obj.uniqueName, st.Item1 });
+				}
+			}
+
+			/*foreach (Object obj1 in env.objects) 
+			{
+				if (!obj1.affordances_.Contains ("IsGraspable"))
+					continue;
+				predicates.Add (new string[3] { "Grasping", "Robot", obj1.uniqueName });
+				foreach (Object obj2 in env.objects)
+				{
+					predicates.Add (new string[3] { "On", obj1.uniqueName, obj2.uniqueName });
+					predicates.Add (new string[3] { "In", obj1.uniqueName, obj2.uniqueName });
+				}
+			}*/
+
+			foreach (String objName1 in objects) 
+			{
+				foreach (String objName2 in objects) 
+				{
+					if (objName1.Equals (objName2) || !env.findObject (objName1).affordances_.Contains ("IsGraspable"))
+						continue;
+					if (this.ftr.getPredicateFreq ("(On " + objName1 + " " + objName2 + ")") > 0 && 
+						env.isSastified ("On " + objName1 + " " + objName2) == 0)
+						predicates.Add (new string[3] { "On", objName1, objName2 });
+					if (this.ftr.getPredicateFreq ("(In " + objName1 + " " + objName2 + ")") > 0 && 
+						env.isSastified ("In " + objName1 + " " + objName2) == 0)
+						predicates.Add (new string[3] { "In", objName1, objName2 });
+				}
+			}
+			return predicates;
+		}
+
+		public List<String[]> rankPredicateSkeletals(Clause cls, Environment env, List<Instruction> insts, List<String> grounded)
+		{
+			/* Function Description: Ranks the predicates based on
+			 * Bag-Of-Word. It then returns the predicate sorted
+			 * by bag-of-word cost. */
+
+			List<double> scores = new List<double> ();
+			List<String> objects = grounded; //new List<String> ();
+			//foreach (Instruction inst in insts)
+			for(int k=0; k<Math.Min(2,insts.Count());k++)
+				objects = objects.Union (insts[insts.Count()-k-1].returnObject ()).ToList ();
+			List<String[]> predicates = initPredicate (env, objects);
+
+			for (int i=0; i<predicates.Count(); i++) 
+			{
+				/* using hacked up primitive score
+				 * state objName1 stateName 
+				 *  score (max_j {objName1,iterator-np_j} + max_j {stateName,iterator-np_j}) + 1{objName has been used}
+				 * rel objName1 objName2
+				 *  score (max_j {objName2,iterator-np_j} + max_j {objName2,iterator-np_j}) + (1{objName1 has  been used}+1{objName2 has  been used})/2*/
+				double score = 0;// score1 = 0, score2 = 0;
+				if (predicates [i] [0].Equals ("state")) 
+				{
+					/*for (int j=0; j< cls.lngObj.Count(); j++) 
+					{
+						score1 = Math.Max (score1, );//sensim.GetScore (Global.fetchObjExpand(predicates[i][1]),cls.lngObj[j].getName()));
+							score2 = Math.Max (score2, );//sensim.GetScore (Global.fetchObjExpand(predicates[i][2]),cls.lngObj[j].getName()));
+					}
+					score = score1+score2;*/
+					if (objects.Contains (predicates [i] [1]))
+						score = score + 1;
+					//stateName such as IceCream match the object name IceCream_1
+					bool stateValObject = objects.Exists(name => Global.base_(name).Equals(predicates[i][2],StringComparison.OrdinalIgnoreCase));
+					//stateName such as Vanilla match the stateName of objects 
+					bool stateValStateVal = objects.Exists (delegate(String name)
+					{
+						Object obj = env.findObject(name);
+						return obj.getState().Exists(states => states.Item1.Equals(predicates[i][2]) && states.Item2.Equals("True"));
+					});
+
+					if (stateValObject || stateValStateVal)
+						score = score + 1;
+				}
+				else 
+				{
+					/*for (int j=0; j< cls.lngObj.Count(); j++) 
+					{
+						score1 = Math.Max (score1, sensim.GetScore (Global.fetchObjExpand(predicates[i][1]),cls.lngObj[j].getName()));
+						score2 = Math.Max (score2, sensim.GetScore (Global.fetchObjExpand(predicates[i][2]),cls.lngObj[j].getName()));
+					}
+					score = score1 + score2;*/
+					if (objects.Contains(predicates [i] [1]))
+						score = score + 1;
+					if (objects.Contains(predicates [i] [2]))
+						score = score + 1;
+				}
+				scores.Add(score);
+			}
+
+			//sort the predicate based on score
+			for (int i=0; i<predicates.Count(); i++) 
+			{
+				int index = i;
+				for (int j=i+1; j<predicates.Count(); j++) 
+				{
+					if (scores [j] > scores [index])
+						index = j;
+				}
+				string[] swap = predicates [index];
+				double swapsc = scores[index];
+				predicates [index] = predicates [i];
+				scores [index] = scores [i];
+				predicates [i] = swap;
+				scores [i] = swapsc;
+			}
+
+			for (int k=0; k<objects.Count(); k++)
+				this.lg.writeToFile (objects[k]+", ");
+			this.lg.writeToFile ("<br/><span style='color:orange'>Top Rank Predicates: "); //pick those with maximum score
+			double maxScore = scores[0];
+			int pred=0;
+			for (pred=0; pred<predicates.Count(); pred++) 
+			{
+				if (scores [pred] != maxScore)
+					break;
+				this.lg.writeToFile ("(" + Global.arrayToString (predicates [pred], ' ') + ") cost = " + scores [pred] + " and ");
+			}
+			this.lg.writeToFile ("</span><br/>");
+			Console.WriteLine ("Done");
+			return predicates.GetRange(0,pred);
+		}
+
+        /* Define Inference Algorithms / Baselines below - 
+         * Each inference algorithm/baseline accepts a a test environment and some other parameters
+         * and returns a tuple of instruction consisting of the ground truth and the inferred sequence.
+         * Since ground truth should be known, future revisions should make it a single instruction
+         * sequence. */
+
+        public List<Instruction> chance(Tuple<int, int> test, String methodName)
+        {
+            /* Function Description : Outputs the program based on chance approach
+             * Outputs (answer, groundTruth)*/
+
+            List<Instruction> output = new List<Instruction>();
+            Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> utmp = this.obj.getDataInformation(test);
+            Tuple<List<Clause>, List<Instruction>> ans = new Tuple<List<Clause>, List<Instruction>>(utmp.Item2.returnEventClause(), utmp.Item3);
+            List<Clause> cls = ans.Item1;
+
+            lg.writeToFile("<div> <button onclick='show(this)'>Using Method : " + methodName + " </button> <div style='display:none;'><h3>Clausal Decomposition</h3>");
+            foreach (Clause cl in cls)
+                cl.display(this.lg);
+
+            foreach (Clause cl in cls)
+            {
+                String verbName = cl.verb.getName();
+                bool added = false;
+                foreach (VerbProgram v in this.veil)
+                {
+                    if (String.Equals(v.getName(), verbName, StringComparison.OrdinalIgnoreCase)) //verb exists
+                    {
+                        added = true;
+                        List<VeilTemplate> programs = v.getProgram();
+
+                        #region programInstance Selection
+                        /* select the one with mininimm distance value where the distance is computed using different methods */
+                        this.lg.writeToFile("<span style='color:blue'> Possible Options : " + programs.Count() + "</span><br/>");
+                        int minIndex = this.rnd.Next(programs.Count);
+                        VeilTemplate minEntry = programs[minIndex];
+                        #endregion
+
+                        #region debugOnly
+                        String data = "<div> <button onclick='show(this)'> ShowDebugInformation </button> <div style='display:none;'> Possible Option " + programs.Count() + "<br/> ";
+                        for (int iter = 0; iter < programs.Count(); iter++)
+                        {
+                            data = data + "<span style='font-style: italic; '> Program Instance : " + iter + ", File_Loc " + v.fileNameString(iter) + ", Distance" + 1 + "</span><br/>";
+                        }
+                        data = data + "</div></div>";
+                        lg.writeToFile(data);
+                        #endregion
+
+                        /* Instantitate the Instruction Set using cls and tmp.Item1*/
+                        lg.writeToFile("<span>Verb Name -  " + v.getName() + "  File Loc " + v.fileNameString(minIndex) + "</span><br/><div> Instruction Set <br/>");
+
+                        foreach (Instruction inst in minEntry.inst_)
+                            inst.display(this.lg);
+
+                        lg.writeToFile("</div><div> After Instantiation<br/> Using Clause <br/>");
+                        cl.display(this.lg);
+
+                        lg.writeToFile("To instantiate instruction set<br/>");
+                        minEntry.cls_.display(this.lg);
+                        lg.writeToFile("</div><br/><br/>");
+
+                        List<Instruction> instantiated = null;
+                        instantiated = this.resetInstantiate(minEntry);
+
+                        foreach (Instruction inst in instantiated)
+                            inst.display(this.lg);
+
+                        foreach (Instruction inst in instantiated)
+                        {
+                            /*Execute the instruction and update the environment*/
+                            lg.writeToFile("<li>Executing Instruction");
+                            inst.display(lg);
+                            lg.writeToFile("</li>");
+                            output.Add(inst);
+                        }
+                        lg.writeToFile("Execution Over<br/><br/>");
+                        break;
+                    }
+                }
+                if (!added)
+                {
+                    lg.writeToErrFile("Could not find/learn definition for the verb " + verbName);
+                    lg.writeToFile("Could not find/learn definition for the verb " + verbName);
+                }
+            }
+
+            this.lg.writeToFile("</div></div><div> Final Output <br/><br/><table>");
+            int count = Math.Max(output.Count(), ans.Item2.Count());
+            for (int i = 0; i < count; i++)
+            {
+                this.lg.writeToFile("<tr><td>");
+                if (i < output.Count())
+                    output[i].display(this.lg);
+                this.lg.writeToFile("</td><td>");
+                if (i < ans.Item2.Count())
+                    ans.Item2[i].display(this.lg);
+                this.lg.writeToFile("</td></tr>");
+            }
+            this.lg.writeToFile("</table></div><br/><br/>");
+
+            return output;
+        }
+
+        public List<Instruction> templateBasedBaselines(Tuple<int, int> test)
+        {
+            /* Function Description : Following is a baseline algorithm based partially on 
+             * the workd - 'Grounding Spatial Relations for Human-Robot Interaction by 
+             * Guadarrama et al. IROS'. The work focusses on manually defined templates and we
+             * extend it by taking into account many-many mapping. However, the main paper focussed
+             * on grounding of language-objects while in our present work we will just have a 
+             * predefined mapping to objects in the real environment. These templates are defined
+             * independently of the actual environment. Since these templates do not have any predefined
+             * objects hence we will use a different version of instantiation for this algorithm */
+
+            Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> utmp = this.obj.getDataInformation(test);
+            List<Instruction> output = new List<Instruction>();
+
+            List<Clause> cls = utmp.Item2.returnEventClause();
+            Environment iterator = this.envList[test.Item1 - 1].makeCopy();
+
+            foreach (Clause cl in cls) //iterate over each clause
+            {
+                String verbName = cl.verb.getName();
+                List<Instruction> found = new List<Instruction>();
+                foreach (Template tm in this.ftr.templates)
+                {
+                    if (tm.isSameVerb(verbName))
+                    {
+                        found = tm.instantiate(cl, iterator);
+                        break;
+                    }
+                }
+
+                //execute and update iterator
+                foreach (Instruction inst in found)
+                {
+                    iterator = this.sml.execute(inst, iterator);
+                    output.Add(inst);
+                }
+            }
+
+            this.lg.writeToFile("Final Output <br/><br/><table>");
+            int count = Math.Max(output.Count(), utmp.Item3.Count());
+            for (int i = 0; i < count; i++)
+            {
+                this.lg.writeToFile("<tr><td>");
+                if (i < output.Count())
+                    output[i].display(this.lg);
+                this.lg.writeToFile("</td><td>");
+                if (i < utmp.Item3.Count())
+                    utmp.Item3[i].display(this.lg);
+                this.lg.writeToFile("</td></tr>");
+            }
+            this.lg.writeToFile("</table><br/><br/>");
+
+            return output;
+        }
+
+        public List<Instruction> treeExploration(Tuple<int, int> test)
+        {
+            /* Function Description : Uses tree-expansion algorithm to expand the tree of instructions and
+             * the pick up the node which has maximum resemblance to the given clause and can be easily
+             * executed. */
+            Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> utmp = this.obj.getDataInformation(test);
+            List<Instruction> output = new List<Instruction>();
+
+            List<Clause> cls = utmp.Item2.returnEventClause();
+            Environment iterator = this.envList[test.Item1 - 1].makeCopy();
+
+            foreach (Clause cl in cls) //iterate over each clause
+            {
+                List<String> clsW = new List<String>();
+                clsW.Add(cl.verb.getName());
+                List<SyntacticTree> sns = cl.returnNounList();
+                foreach (SyntacticTree sn in sns)
+                    clsW.Add(sn.getName());
+
+                InstructionTree root = new InstructionTree(iterator);
+				double[] weights_opt = null;
+                List<Instruction> receiv = InstructionTree.findBestAndExpand(root,weights_opt, clsW);
+                foreach (Instruction inst in receiv)
+                    output.Add(inst);
+                root.free();
+            }
+
+            this.lg.writeToFile("Final Output <br/><br/><table>");
+            int count = Math.Max(output.Count(), utmp.Item3.Count());
+            for (int i = 0; i < count; i++)
+            {
+                this.lg.writeToFile("<tr><td>");
+                if (i < output.Count())
+                    output[i].display(this.lg);
+                this.lg.writeToFile("</td><td>");
+                if (i < utmp.Item3.Count())
+                    utmp.Item3[i].display(this.lg);
+                this.lg.writeToFile("</td></tr>");
+            }
+            this.lg.writeToFile("</table><br/><br/>");
+
+            return output;
+        }
+		
+        public List<Instruction> optimumWithLatentNodesAndTrim(Tuple<int, int> test, Environment start, Tester tester, int topN, double[] weights)
+        {
+            /* Function Description : This algorithm implements the forward-backward inference algorithm
+             * for the assumed linear CRF. The algorithm works as - 
+             * 
+             * It finds sample space environments at each step of the CRF chain for the next step and uses the
+             * the sample space of the previous step to do the forward inference.
+             * The main agenda is that the space of environment at level k will be less than O(|T|^k) where
+             * |T| is the average sample space of instructions at each level. The argument for this sparsity
+             * assumptions is that different ways of doing anything will focus on a cover of objects which will
+             * be much smaller than space of all objects.
+             * 
+             * Complexity : 
+             * 
+             * |T|  : average number of instruction sequence per clause
+             * |E|  : space of all environments
+             * |ER| : average space of all reduced environments
+             * k    : length of sequence = number of clauses in the environment
+             * 
+             * Brute Force Search                       -  O(|T|^k)
+             * Forward-Backward on all environments     -  O(k|E||T|)
+             * Forward-Backward on reduced environment  -  O(k|ER||T|)
+             */
+
+
+            Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> testData = tester.obj.getDataInformation(test);
+            List<Clause> cls = testData.Item2.returnEventClause();
+
+            if (topN == -1)
+                tester.lg.writeToFile("<div> <button onclick='show(this)'>Using Method Optimum-Algorithm </button> <div style='display:none;'><h3>Clausal Decomposition</h3>");
+            else tester.lg.writeToFile("<div> <button onclick='show(this)'>Using Method Top" + topN + "Algorithm </button> <div style='display:none;'><h3>Clausal Decomposition</h3>");
+
+            foreach (Clause cl in cls)
+                cl.display(tester.lg);
+
+            /* Compute the optimal instruction sequence by forward recursion 
+             *
+             * Alpha(E,k) = min_{E' \in sampleSpace[k]} min_{I \in T, Phi(E',I_l:I) = E } { Psi_{kl} + Psi_{kl}' + Psi_{k} + Psi_{k}' + Alpha(E',k-1) }
+             *
+             * alpha[e,k] data structure will store both the optimum instruction and the optimum cost
+             * where the optimal instruction is the one with minimum cost starting with E0 and ending at level k in chain
+             * with the environment e
+             */
+
+            List<int> length = new List<int>(); //lengths of different sections
+            List<Tuple<Environment, List<Instruction>, double>>[] alpha = new List<Tuple<Environment, List<Instruction>, double>>[cls.Count + 1];
+
+            for (int i = 0; i < cls.Count; i++)
+            {
+                if (i == 0)
+                {
+                    alpha[0] = new List<Tuple<Environment, List<Instruction>, double>>();
+                    alpha[0].Add(new Tuple<Environment, List<Instruction>, double>(start, new List<Instruction>(), 0));  //base case (StartingEnv, {empty-sequence},0 cost)
+                }
+                alpha[i + 1] = new List<Tuple<Environment, List<Instruction>, double>>(); //after this line, alpha[i], alpha[i+1] are defined with former already computed
+
+                String verbName = cls[i].verb.getName();
+
+                /* we have to define alpha(E,i) for all E in sampleSpace[i] assuming
+                 * alpha(E',j) is known for all reachable E' and j < i. We also assume 
+                 * we know the sampleSpace at all level j < i */
+
+                foreach (Tuple<Environment, List<Instruction>, double> seen in alpha[i]) //now E = env
+                {
+                    Environment env = seen.Item1;
+                    foreach (VerbProgram v in tester.veil)
+                    {
+                        if (String.Equals(v.getName(), verbName, StringComparison.OrdinalIgnoreCase)) //verb exists
+                        {
+                            List<VeilTemplate> programs = v.getProgram();
+                            List<Tuple<Object, String, String, int>> tableOfStates = null; //used by accumulated score
+
+                            /* Compute the variability table of the form 
+                                * [ Object : State : Value ]
+                                * where Object : is in Clause, State are its state and Value is the value of the state*/
+                            tableOfStates = this.createTableOfStates(cls[i], env, programs);
+
+                            for (int t = 0; t < programs.Count(); t++) //Step : Iterate over all program instances
+                            {
+                                /* For each program instance (T) we compute the score given by - 
+                                 * 
+                                 * interpolation or latent node score (T) + score of the non-latent node (T) + Beta(E',i+1)
+                                 * where E' = execute(E, interpolated-instantianted program)
+                                 */
+
+                                for (int trim = 0; trim <= programs[t].inst_.Count(); trim++) // Step :  Trimming
+                                {
+                                    double score_interpolate = 0, score_core = 0, trim_score = weights[this.ftr.numFeature - 4] * trim * trim;
+                                    VeilTemplate tmp = this.trimItDown(programs[t], trim);
+                                    Tuple<double, List<Tuple<String, String>>> result = null;
+                                    double cost = 0;
+
+                                    // Step : Find the interpolation
+                                    List<Tuple<string, string>> matching = this.mapping(tmp, cls[i]);
+                                    //List<Instruction> interpolation = this.symp.writeFiles(stackOfEnv.Last(), tmp.Item3, matching);
+									Tuple<List<Instruction>, String> resultInterpol = null;//tester.symp.satisfyConstraints(env, new List<Instruction>(), tmp.env_, tmp.inst_, matching);
+                                    List<Instruction> interpolation = resultInterpol.Item1;
+
+                                    // Step : Change the environment
+                                    Environment iterator = env.makeCopy();
+                                    foreach (Instruction inst in interpolation)
+                                        iterator = tester.sml.execute(inst, iterator);
+
+                                    // Step : compute the score
+                                    score_interpolate = this.ftr.giveInterpolationScore(interpolation, weights);
+
+                                    // Step : Compute the score of the interpolation
+                                    result = this.ftr.getAccumulatedScore(tmp, cls[i], iterator, tableOfStates, t.ToString(), this); //compute score here
+                                    score_core = result.Item1;
+
+                                    int interPolLength = interpolation.Count();
+
+                                    List<Instruction> core = this.instantiate(tmp, cls[i], null);
+                                    cost = score_interpolate + score_core + trim_score;
+
+                                    List<Instruction> total = interpolation;
+                                    foreach (Instruction inst in core)
+                                    {
+                                        iterator = tester.sml.execute(inst, iterator);
+                                        total.Add(inst);
+                                    }
+
+                                    cost = cost + seen.Item3; //adding the previously seen cost
+
+                                    /* we have generated a step where the sequence I_interpol : I_core 
+                                     * given the environment env gives the environment iterator. We now
+                                     * see if the environment iterator appears in alpha[i+1]. If not then
+                                     * we add its entry. If yes then we see if the cost of this one is lower
+                                     * and according replace */
+
+                                    List<Instruction> entireInstructionSeq = seen.Item2.ToList();
+                                    foreach (Instruction inst in total)
+                                    {
+                                        entireInstructionSeq.Add(inst);
+                                    }
+
+                                    bool replace = false;
+                                    int oldEntry = -1;
+                                    for (int iter = 0; iter < alpha[i + 1].Count(); iter++)
+                                    {
+                                        Tuple<Environment, List<Instruction>, double> newEntry = alpha[i + 1][iter];
+                                        if (newEntry.Item1.distance(iterator) == 0)
+                                        {
+                                            oldEntry = iter;
+                                            if (cost < newEntry.Item3)
+                                            {
+                                                replace = true;
+                                                break; //there is atmost one entry with same environment
+                                            }
+                                        }
+                                    }
+
+                                    if (oldEntry == -1) //no entry exist
+                                        alpha[i + 1].Add(new Tuple<Environment, List<Instruction>, double>(iterator, entireInstructionSeq, cost));
+                                    else if (replace)
+                                        alpha[i + 1][oldEntry] = new Tuple<Environment, List<Instruction>, double>(iterator, entireInstructionSeq, cost);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                /* If a given verb does not have any templates then alpha[i+1] will be
+                 * empty in which case we simply copy alpha[i] to alpha[i+1] */
+                if (alpha[i + 1].Count() == 0)
+                    alpha[i + 1] = alpha[i];
+                else alpha[i].Clear(); /* Whereto the climber upward turns his face. But when he once attains the upmost round, He then unto the ladder turns his back - Brutus [Julius Caesar] */
+
+
+                /* Churning
+                 * The time complexity of O(kEt) is significant since each of the t templates
+                 * takes sufficient amount of time. I propose to use a greedy churning strategy
+                 * where we only take the top N choices. This compromises optimality guarantee
+                 * at the cost of speed. If N==-1 then the algorithm will use all the entry
+                 * else it will use the top choices.
+                 */
+
+                if (topN != -1 && alpha[i + 1].Count() > topN)
+                {
+                    //keep only the topN choices in alpha[i+1]
+                    List<Tuple<Environment, List<Instruction>, double>> best = new List<Tuple<Environment, List<Instruction>, double>>();
+                    List<int> bestIndex = new List<int>();
+
+                    for (int iter = 0; iter < alpha[i + 1].Count(); iter++)
+                    {
+                        if (iter < topN)
+                        {
+                            //insert at the proper position
+                            if (iter == 0)
+                            {
+                                bestIndex.Add(0);
+                            }
+                            else
+                            {
+                                bool added = false;
+                                for (int j = 0; j < iter; j++)
+                                {
+                                    if (alpha[i + 1][iter].Item3 < alpha[i + 1][bestIndex[j]].Item3)
+                                    {
+                                        added = true;
+                                        bestIndex.Insert(j, iter);
+                                        break;
+                                    }
+                                }
+
+                                if (!added)
+                                    bestIndex.Add(iter);
+                            }
+                        }
+                        else if (alpha[i + 1][iter].Item3 < alpha[i + 1][bestIndex[topN - 1]].Item3)
+                        {
+                            //insert at the proper position
+                            for (int j = 0; j < topN; j++)
+                            {
+                                if (alpha[i + 1][iter].Item3 < alpha[i + 1][bestIndex[j]].Item3)
+                                {
+                                    bestIndex.Insert(j, iter);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    //use bestIndex to store these choices in best
+                    for (int iter = 0; iter < topN; iter++)
+                        best.Add(alpha[i + 1][bestIndex[iter]]);
+                    alpha[i + 1] = best;
+                }
+
+                #region debugPurposeOnly
+                /*List<Tuple<String, String, int>> val = new List<Tuple<String, String, int>>();
+                foreach(Tuple<Environment, List<Instruction>, double> entry in alpha[i+1])
+                {
+                    foreach (Object obj in entry.Item1.giveObjList())
+                    {
+                        foreach (Tuple<String, String> t in obj.getState())
+                        {
+                            bool exist = false;
+                            for (int z = 0; z < val.Count(); z++)
+                            {
+                                Tuple<String, String, int> e = val[z];
+                                if (e.Item1.Equals(obj.getName() + t.Item1) && e.Item2.Equals(t.Item2))
+                                {
+                                    exist = true;
+                                    val[z] = new Tuple<string, string, int>(e.Item1, e.Item2, e.Item3 + 1);
+                                }
+                            }
+
+                            if (!exist)
+                            {
+                                val.Add(new Tuple<string, string, int>(obj.getName()+t.Item1,t.Item2,1));
+                            }
+                        }
+                    }
+                }*/
+                #endregion
+            }
+
+            //find optimal instruction from alpha[cls.count]
+
+            List<Instruction> output = null;
+            double optCost = Double.PositiveInfinity;
+            if (cls.Count() == 0)
+                output = new List<Instruction>();
+            else
+            {
+                foreach (Tuple<Environment, List<Instruction>, double> done in alpha[cls.Count])
+                {
+                    if (done.Item3 < optCost)
+                    {
+                        output = done.Item2;
+                        optCost = done.Item3;
+                    }
+                }
+            }
+
+            #region fancyOutput
+            tester.lg.writeToFile("</div></div><div> Final Output Cost = (" + optCost + ") <br/><br/><table>");
+
+            int count = Math.Max(output.Count(), testData.Item3.Count());
+
+            for (int i = 0; i < count; i++)
+            {
+                tester.lg.writeToFile("<tr><td>");
+                if (i < output.Count())
+                {
+                    output[i].display(tester.lg);
+                }
+                tester.lg.writeToFile("</td><td>");
+                if (i < testData.Item3.Count())
+                    testData.Item3[i].display(tester.lg);
+                tester.lg.writeToFile("</td></tr>");
+            }
+            tester.lg.writeToFile("</table></div><br/><br/>");
+            #endregion
+
+            return output;
+        }
+
+		public List<Instruction> rss2015(Clause cls, Environment env, Tester tester, Dictionary<String, Double> weights, List<object> param)
+        {
+            /* Function Description : The main algorithm for grounding the clause-tree cls given the starting environment env. */
+			bool usePredicates =(bool)param [0], generate = (bool)param[1];
+			String name = "rss2015 Predicates " + usePredicates.ToString () + " Generative " + generate.ToString ();
+			tester.lg.writeToFile ("<div> <button onclick='show(this)'> " + name + "</button> <div style='display:none;'><h3>Clausal Decomposition</h3>");
+            List<Clause> evnCl = cls.returnEventClause();
+            foreach (Clause c in evnCl)
+                tester.lg.writeToFile(c.getClauseDscp()+"; ");
+            
+            tester.lg.writeToFile("<br/>");
+
+            List<Tuple<Clause, List<Tuple<Environment, List<Instruction>, double>>>> alpha = new List<Tuple<Clause, List<Tuple<Environment, List<Instruction>, double>>>>();
+
+            List<Clause> visited = new List<Clause>(); //A node is visited when it has been considered for score evaluation
+            List<Clause> cover = new List<Clause>();   /* Cover is a set clause nodes which have not been visited 
+                                                       * but all their parents have been visited */
+            List<Instruction> output = null;
+            double maxScoreLeaf = Double.NegativeInfinity;
+            cover.Add(cls); //Since parent of cls is null
+
+            List<Tuple<Environment, List<Instruction>, double>> singletonRoot = new List<Tuple<Environment, List<Instruction>, double>>();
+            singletonRoot.Add(new Tuple<Environment, List<Instruction>, double>(env, new List<Instruction>(), 0));
+            alpha.Add(new Tuple<Clause, List<Tuple<Environment, List<Instruction>, double>>>(null, singletonRoot));
+			Clause interpolParent = null;
+			Environment interpolEnv = null;
+			List<Instruction> interpolInst = new List<Instruction> ();
+
+            while (cover.Count() != 0)
+            {
+                Clause iterator = cover[0];
+				if(iterator.isCondition)
+					Console.WriteLine("Working on a condition "+iterator.conditionName);
+				else Console.WriteLine("Working on a fresh clause "+iterator.verb.getName());
+                cover.RemoveAt(0);
+
+                /* Find reachable entries
+                 * - as its in the cover, all its parents have been visited
+                 * - find the entries of the parents in the alpha list and trim the non-reachable ones
+                 *   ex: if there is an if-condition between the parent and this cls then trim the entries
+                 *       according to the condition, the environment in the entry and position of the iterator node
+                 *       ex:- if the iterator node is on the true side and if condition is true in the environment then
+                 *       keep the entry else trim*/
+
+                List<Tuple<Environment, List<Instruction>, double>> entryThisClause = new List<Tuple<Environment, List<Instruction>, double>>();
+
+                foreach (Tuple<Clause, List<Tuple<Environment, List<Instruction>, double>>> entries in alpha)
+                {
+                    if (iterator.parent.Contains(entries.Item1) || (iterator.parent.Count() == 0 && entries.Item1 == null))
+                    {
+                        foreach (Tuple<Environment, List<Instruction>, double> history in entries.Item2)
+                        {
+                            //if the parent is a condition then make sure that this branch is reachable
+                            bool reachable = true;
+                            if (entries.Item1 != null && entries.Item1.isCondition)
+                                reachable = history.Item1.isConditionSatisfied(entries.Item1.condition);
+
+                            if (reachable) //only if the clause is reachable can you do anything with it
+                            {
+								Tuple<List<Instruction>, int, Double> res = null; 
+								if (usePredicates)
+									res = this.rss2015NodePredicates (iterator, history, tester, entryThisClause, weights);
+								else
+									res = this.rss2015NodeInstruction (iterator, history, tester, entryThisClause, weights);
+                                if (iterator.children == null || iterator.children.Count() == 0)
+                                {
+                                    if (res.Item3 > maxScoreLeaf)
+                                    {
+                                        output = res.Item1;
+										maxScoreLeaf = res.Item3;
+                                    }
+                                }
+
+								if (generate && !iterator.isCondition) //Generates New Meaning for eventive-clauses
+								{
+									/* Using the interpolation we generate new entries in VEIL.
+									 * Presently using the following method:
+									 *          C_{i}             C_{i+1}
+									 * I_{i,l}  I_{i}  I_{i+1}    I_{i+1,l}
+									 * then add I_{i}:I_{i+1} to veil library 
+									 * with clause C_{i} and the environment just
+									 * after I_{i,l} */
+
+									if (interpolParent != null) //parent = C_{i} in our notation
+									{
+										for (int i=0; i<res.Item2; i++)
+											interpolInst.Add (res.Item1[i].makeCopy()); //appends I_{i+1,l} toI_{i}
+										interpolInst = Global.filter (interpolInst);
+										tester.checkAndAdd (interpolInst, 0, interpolInst.Count () - 1, interpolParent, interpolEnv, -1);
+										Console.WriteLine ("Added a definition for " + interpolParent.verb.getName () + " of length " + interpolInst.Count ());
+									}
+
+									interpolParent = iterator; //stores C_{i}
+									List<Instruction> itmp = new List<Instruction> ();
+									for (int iter=0; iter<res.Item2; iter++)
+										itmp.Add (res.Item1[iter].makeCopy()); //this is I_{il}
+
+									interpolEnv = tester.sml.executeList (Global.filter(itmp), history.Item1);
+									interpolInst.Clear ();
+									//for (int iter=res.Item2+1; iter<res.Item1.Count(); iter++)
+									//	interpolInst.Add (res.Item1[iter].makeCopy());  //this is I_{i}
+								}
+                            }
+                        }
+						Console.WriteLine ("Entry Clause added = "+entryThisClause.Count());
+                    }
+                }
+
+                #region keep_top_k_options
+                entryThisClause.Sort((a, b) => b.Item3.CompareTo(a.Item3));
+                if(entryThisClause.Count() >= 1)
+                    entryThisClause.RemoveRange(1, entryThisClause.Count() - 1);
+                #endregion
+
+                //Add iterator to the list of visited nodes and update the alpha list
+                visited.Add(iterator);
+                alpha.Add(new Tuple<Clause, List<Tuple<Environment, List<Instruction>, double>>>(iterator, entryThisClause));
+
+                // Add those children of the iterator to the cover whose all parents have been visited
+                foreach (Clause child in iterator.children)
+                {
+                    bool unvisParentExist = false;
+                    foreach (Clause parent in child.parent)
+                    {
+                        if (!visited.Contains(parent))
+                            unvisParentExist = true;
+                    }
+                    if (!unvisParentExist)
+                        cover.Add(child);
+                }
+            }
+            // we output the instruction sequence = argmin_{[i]} { [ (c,e,[i],double) \in alpha, c is a leaf}
+            tester.lg.writeToFile("</div></div>");
+            if(output == null)
+				return new List<Instruction>();
+			Console.WriteLine ("Length is " + output.Count ());
+            return output;
+        }
+
+		private Tuple<List<Instruction>, int, Double> rss2015NodeInstruction(Clause iterator, Tuple<Environment, List<Instruction>, double> history,
+		                                                     Tester tester, List<Tuple<Environment, List<Instruction>, double>> entryThisClause,
+		                                                     Dictionary<String, Double> weights)
+        {
+            /* Function Description: For a given node, the history (given environment, instruction so far, score so far) 
+             * this algorithm updates the entryThisClause vector by performing inference steps on this clause node.
+             * The algorithm also return the best score and corresponding instruction sequence. */
+
+            bool unseen = true; //verb maybe unseen in the data-set
+            Environment envTest = history.Item1;
+            List<Instruction> output = null;
+            double maxScoreLeaf = Double.NegativeInfinity;
+			int interpolateLen = -1;
+
+            if (!iterator.isCondition) //moves are applied only on eventive clauses
+            {
+				tester.lg.writeToFile("<div> <button onclick='show(this)'>Clause - "+iterator.verb.getName()+"</button> <div style='display:none;'>");
+                #region apply_inference_steps
+                /* - infern I^pre, I and I^post 
+                 *  - infer I from the dataset D
+                 *  - iterate over each dataset D_iterator = { {(c,i,e,z,\xi) \in D such that v(C)=v(iterator) }
+                 */
+
+                List<VerbProgram> veil = tester.veil;
+                foreach (VerbProgram v in veil)
+                {
+                    if (v.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        unseen = false; //its seen in th data-set
+                        List<VeilTemplate> vtList = v.getProgram();
+
+                        int count = 0;
+                        foreach (VeilTemplate vt in vtList)
+                        {
+
+                            /* For each vt = (c,i,e,z\xi)
+                             * - do trimming over the length of i
+                             * - do instantiation of the remaining
+                             * - infer i^pre and i^post
+                             * - compute the cost
+                             * - add entry to the alpha list
+                             * */
+                            List<Instruction> insts = vt.inst_;
+                            for (int trim = 0; trim < 1/*insts.Count() + 1*/; trim++)
+                            {
+                                /* Consider insts[0:trim] where - insts[0:0] = No-Op and 
+                                 * insts[0:insts.Count()] means the entire sequence */
+                                VeilTemplate tmp = this.trimItDown(vt, trim); //trimming
+								Tuple<int[], double> mappingResult = this.mapping(tmp, iterator, envTest, weights,false);
+								if(mappingResult ==null)
+									continue;
+                                int[] mapping = mappingResult.Item1;
+                                List<Instruction> instant = this.instantiation(tmp, mapping, envTest);
+
+                                /* We already have C_i that is the iterator, we also know the starting 
+                                 * environment envTest, we now need to infer the I^pre and I^post. 
+                                 * For the moment I am not computing I^post but this shall be remedied
+                                 * in the future version. Presently computing I^pre using hard-constraints only */
+
+                                /* Contains different contraints that shall acts as the goal for a Symbolic Planner.*/
+                                List<String> constraints = new List<String>();
+                                String hardConstraints = "";
+                                Environment iterEnv = envTest.makeCopy();
+                                foreach (Instruction inst in instant)
+                                {
+                                    Tuple<double, string, string> res = tester.sml.satSyntConstraints(inst, iterEnv);
+                                    if (res.Item3 == null) //this instruction can never be satisfied
+                                    {
+                                        hardConstraints = null;
+                                        break;
+                                    }
+                                    if (res.Item3.Length > 0)
+									{
+										if(hardConstraints.Length==0)
+											hardConstraints=res.Item3;
+                                        else hardConstraints = hardConstraints + "^" + res.Item3;
+									}
+                                    iterEnv = tester.sml.execute(inst, iterEnv, true); //forced execution
+                                }
+
+                                if (hardConstraints == null)//this instruction sequence is hopelessly irrepairable hence continue
+                                    continue;
+
+								hardConstraints = string.Join("^",hardConstraints.Split(new char[]{'^'}).Distinct().ToList());
+                                constraints.Add(hardConstraints);
+
+                                foreach (String cstr in constraints)
+                                {
+                                    /* For each constraint, find the instruction sequence that satisfies it
+                                     * Each constraint is of type - predicate^predicate^.... where these
+                                     * predicates need to be satisfied */
+
+									List<Instruction> iPre = tester.symp.satisfyConstraints(envTest, cstr);
+									if(iPre == null)
+										continue;
+                                    List<Instruction> total = iPre.ToList(); //entire sequence corresponding to iterator
+                                    foreach (Instruction itmp in instant)
+                                        total.Add(itmp);
+
+                                    /* Feature computation stage
+                                     * - Given envTest, instant, iPre we compute the feature in order as -
+                                     *   1. Mapping Cost (which takes into account 5 features)
+                                     *   2. Instruction prior
+                                     *   3. Verb-Correlation Score
+                                     *   4. Description Length
+                                     *   5. Trimming Cost
+                                     */
+
+									double totalScore = history.Item3, mappingCost= 0,iprInter=0,ipr=0,vccInter=0,vcc=0,dscp=0,dscpInter=0,trimCost=0;
+                                    mappingCost = mappingResult.Item2; //Mapping-Cost
+									iprInter = weights["w_ipr"] * iPre.Aggregate(0.0, (sum, n) => sum + this.ftr.getInstructionPrior(n)) / (iPre.Count() + Constants.epsilon);
+                                    ipr = weights["w_ipr"] * instant.Aggregate(0.0, (sum, n) => sum + this.ftr.getInstructionPrior(n)) / (instant.Count() + Constants.epsilon);
+                                    vcc = weights["w_vc"] * this.ftr.getAvgVerbCorrelation(iPre);
+                                    vccInter = weights["w_vc"] * this.ftr.getAvgVerbCorrelation(instant);
+                                    dscpInter = weights["w_dscp"] * iPre.Aggregate(0.0, (sum, n) => sum + n.norm());
+                                    dscp = weights["w_dscp"] * instant.Aggregate(0.0, (sum, n) => sum + n.norm());
+                                    trimCost = weights["w_trim"] * trim * trim;
+									totalScore += mappingCost + iprInter + ipr + vcc + vccInter + dscpInter + dscp + trimCost;
+
+									tester.lg.writeToFile("Template Count ["+count+"]<ul>"+
+									                      "<li><b>Constraints:</b> "+ cstr+"</li>"+
+									                      "<li><b>Length of Interpolation:</b> "+iPre.Count()+"</li>"+
+									                      "<li><b>History:</b> "+history.Item3+"</li>"+
+									                      "<li><b>Mapping Cost:</b> "+mappingCost+"</li>"+
+									                      "<li><b>IPR InterPol:</b> "+iprInter+"</li>"+
+									                      "<li><b>DSCP InterPol:</b> "+dscpInter+"</li>"+
+									                      "<li><b>VCC InterPol:</b> "+vccInter+"</li>"+
+									                      "<li><b>IPR:</b> "+ipr+"</li>"+
+									                      "<li><b>DSCP:</b> "+dscp+"</li>"+
+									                      "<li><b>VCC:</b> "+vcc+"</li>"+
+									                      "<li><b>Trim:</b> "+trimCost+"</li>"+
+									                      "<li><b>Total Energy</b> = "+totalScore+"</li></ul>");
+
+									List<Instruction> entire = history.Item2.ToList();
+									foreach(Instruction inst in total)
+										entire.Add(inst);
+
+									if (iterator.children == null || iterator.children.Count() == 0)//iterator is a leaf
+                                    {
+                                        if (totalScore > maxScoreLeaf)
+                                        {
+											output = entire;
+											interpolateLen = iPre.Count(); 
+                                            maxScoreLeaf = totalScore;
+                                        }
+									}
+
+									Environment iterEnv_ = tester.sml.executeList(total, envTest);
+									Instruction marker = new Instruction ();
+									marker.setNameDescription ("$Verb "+iterator.verb.getName()+" Count = "+count,new List<String>());
+									entire.Add(marker);
+                                    entryThisClause.Add(new Tuple<Environment, List<Instruction>, double>(iterEnv_, entire, totalScore));
+                                }
+                            }
+							count++;
+                        }
+                    }
+                }
+				tester.lg.writeToFile("</div></div>");
+                #endregion
+            }
+
+			if (unseen || iterator.isCondition)//Copy the parent to this node
+			{
+				Instruction marker = new Instruction ();
+				if (unseen)
+					marker.setNameDescription ("$Unseen Verb", new List<String> ());
+				else if (iterator.isCondition)
+					marker.setNameDescription ("$Conditional", new List<String> ());
+				history.Item2.Add (marker);
+			}
+                entryThisClause.Add(history);
+
+            if (output == null)
+            {
+                output = history.Item2;
+                maxScoreLeaf = history.Item3;
+            }
+			return new Tuple<List<Instruction>, int, double> (output, interpolateLen, maxScoreLeaf);
+        }
+
+		private Tuple<List<Instruction>, int, Double> rss2015NodePredicates(Clause iterator, Tuple<Environment, List<Instruction>, double> history, Tester tester, List<Tuple<Environment, List<Instruction>, double>> entryThisClause, Dictionary<String, Double> weights)
+		{
+			/* Function Description: For a given node, the history (given environment, instruction so far, score so far) 
+             * this algorithm updates the entryThisClause vector by performing inference steps on this clause node.
+             * The algorithm also return the best score and corresponding instruction sequence. */
+
+			bool unseen = true; //verb maybe unseen in the data-set
+			Environment envTest = history.Item1;
+			List<Instruction> output = null;
+			double maxScoreLeaf = Double.NegativeInfinity;
+			int init = entryThisClause.Count ();
+
+			List<Object> objList = envTest.objects;
+			double[,] leTestCorrMatrix = null; 
+			List<String[]> predicates = null;
+			if (!iterator.isCondition) 
+			{
+				leTestCorrMatrix = envTest.getLECorrMatrix (iterator, this.sensim);
+				List<String> grounded = new List<String> ();
+				String sdt = "";
+				for (int i=0; i<leTestCorrMatrix.GetLength(0); i++)
+				{
+					String mainNoun = iterator.lngObj [i].getName ();
+					int maxIndex = 0, maxFreq = 1;
+					for (int j=1; j<objList.Count(); j++) 
+					{
+						if (leTestCorrMatrix [i, j] > leTestCorrMatrix [i, maxIndex]) 
+						{
+							maxFreq = 1;
+							maxIndex = j;
+						}
+						else if (leTestCorrMatrix [i, j] == leTestCorrMatrix [i, maxIndex])
+							maxFreq++;
+					}
+					String baseForm = Global.fetchObjExpand (objList [maxIndex].uniqueName);
+					grounded.Add (objList [maxIndex].uniqueName);
+					sdt = sdt + i.ToString () + ". " + mainNoun + " maps to " + baseForm + " Cost: "
+						+ leTestCorrMatrix [i, maxIndex] + " MaxFreq: " + maxFreq + "<br/>";
+				}
+				tester.lg.writeToFile (sdt);
+				predicates = this.rankPredicateSkeletals (iterator, history.Item1, history.Item2, grounded);
+			}
+
+			if (!iterator.isCondition) //moves are applied only on eventive clauses
+			{
+				tester.lg.writeToFile("<div> <button onclick='show(this)'>Clause - "+iterator.verb.getName()+"</button> <div style='display:none;'>");
+				#region apply_inference_steps
+				/* - iterate over each dataset D_iterator = { {(c,i,e,z,\xi) \in D such that v(C)=v(iterator) }
+				 * - fetch the flipped-predicates [post-conditions] of each environment
+				 * - call the symbolic planner to fulfill these post conditions
+				 * - infer I
+				 * - update alpha tables
+                 */
+
+				List<VerbProgram> veil = tester.veil;
+				foreach (VerbProgram v in veil)
+				{
+					if (v.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase))
+					{
+						unseen = false; //its seen in th data-set
+						List<VeilTemplate> vtList = v.getProgram();
+
+						int count = 0;
+						foreach (VeilTemplate vt in vtList)
+						{
+							/* For each vt = (c,i,e,z\xi)
+                             * - map the predicates
+                             * - infer i
+                             * - compute the cost
+                             * - add entry to the alpha list
+                             * */
+
+							if(count==20)
+								break;
+
+							for (int trim = 0; trim < 1; trim++) //select a sub-set of the predicates
+							{
+								/* Consider insts[0:trim] where - insts[0:0] = No-Op and 
+                                 * insts[0:insts.Count()] means the entire sequence */
+								tester.lg.writeToFile("<br/>Count = "+count+" of "+vtList.Count());
+								Tuple<int[], double> mappingResult = this.mapping(vt, iterator, envTest, weights,true);
+								if(mappingResult ==null)
+								{
+									tester.lg.writeToFile("Mapping Result was null...what a shame!");
+									continue;
+								}
+								int[] mapping = mappingResult.Item1;
+								String instantConstraints = string.Join("^",this.instantiatePredicates(vt, mapping, envTest).Distinct().ToList());
+								tester.lg.writeToFile("<br/>Instant Constraint is {"+instantConstraints+"}");
+								if(instantConstraints.Length==0)
+									continue;
+								/* We already have C_i that is the iterator, we also know the starting environment.
+								 * We call the symbolic planner that fulfills the instantiated constraint. */
+								List<String> constraints = new List<String>(){instantConstraints};
+
+								foreach (String cstr in constraints)
+								{
+									/* For each constraint, find the instruction sequence that satisfies it
+                                     * Each constraint is of type - predicate^predicate^.... where these
+                                     * predicates need to be satisfied */
+
+									List<Instruction> total = tester.symp.satisfyConstraints(envTest, cstr);
+									String instString = "";
+									foreach(Instruction inst in total)
+										instString = instString + inst.getName() + "; ";
+									if(total==null) //unsatisfiable constraints
+										continue;  
+									String[] cstrSplit = cstr.Split(new char[]{'^'});
+									/* Feature computation stage
+                                     * - Given envTest, iterator, set of predicates {q} and resultant instruction sequence {i}  
+                                     *   1. Mapping Cost (which takes into account 5 features)
+                                     *   2. Instruction prior
+                                     *   3. Verb-Correlation Score
+                                     *   4. Description Length
+                                     *   5. Trimming Cost 
+                                     *   6. Avg. Frequency of predicate skeletal {q}
+									 */
+									 
+									double totalScore = history.Item3, mapCost =0,iprCost=0, vcCost=0, dscpCost=0,
+									       trimCost=0, predSkeletalPrior=0, predTotalPrior = 0;
+									mapCost= mappingResult.Item2; //Mapping-Cost
+									iprCost= weights["w_ipr"] * total.Aggregate(0.0, (sum, n) => sum + this.ftr.getInstructionPrior(n)) / (total.Count() + Constants.epsilon);
+									vcCost= weights["w_vc"] * this.ftr.getAvgVerbCorrelation(total);
+									dscpCost= weights["w_dscp"] * total.Aggregate(0.0, (sum, n) => sum + n.norm());
+									trimCost= weights["w_trim"] * trim * trim;
+									predSkeletalPrior = cstrSplit.Aggregate(0.0,(sum,cstr_) => sum + v.fetchFrequency(cstr_))/(cstrSplit.Length*v.totalFrequency() + Constants.epsilon);
+									predTotalPrior = cstrSplit.Aggregate(0.0,(sum,cstr_) => sum + this.ftr.getPredicateFreq(cstr_))/(cstrSplit.Length*this.ftr.zPredFreq + Constants.epsilon);
+
+									totalScore = totalScore + mapCost + iprCost + vcCost
+										+ dscpCost + predSkeletalPrior+trimCost;
+
+									tester.lg.writeToFile("<br/><b>Instructions</b>: "+instString+"<br/>");
+									tester.lg.writeToFile("Template Count ["+count+"]<ul>"+
+									                      "<li><b>Mapping Score</b> "+mappingResult.Item2+"</li>"+
+									                      "<li><b>Instruction Prior</b> "+iprCost+"</li>"+
+									                      "<li><b>Verb-Correlation Score</b> "+vcCost+"</li>"+
+									                      "<li><b>Description Length</b> "+dscpCost+"</li>"+
+									                      "<li><b>Trim Cost</b> "+trimCost+"</li>"+
+									                      "<li><b>Predicate Skeletal Prior</b> "+predSkeletalPrior+"</li>"+
+									                      "<li><b>Predicate Total Prior</b> "+predTotalPrior+"</li>"+
+									                      "<li><b>Total Score </b> = "+totalScore+"</li></ul>");
+
+									List<Instruction> entire = history.Item2.ToList();
+									foreach(Instruction inst in total)
+										entire.Add(inst);
+
+									if (iterator.children == null || iterator.children.Count() == 0)//iterator is a leaf
+									{
+										if (totalScore > maxScoreLeaf)
+										{
+											output = entire;
+											maxScoreLeaf = totalScore;
+										}
+									}
+
+									Environment iterEnv_ = envTest.makeCopy();
+									foreach (Instruction inst in total)
+										iterEnv_ = tester.sml.execute(inst, iterEnv_);
+									Instruction marker = new Instruction ();
+									marker.setNameDescription ("$Verb "+iterator.verb.getName()+" Count = "+count,new List<String>());
+									entire.Add(marker);
+									entryThisClause.Add(new Tuple<Environment, List<Instruction>, double>(iterEnv_, entire, totalScore));
+								}
+							}
+							count++;
+						}
+					}
+				}
+				tester.lg.writeToFile("</div></div>");
+				#endregion
+			}
+
+			if (unseen)
+			{	
+				//use the generative process
+				double totalScore = history.Item3;
+				String cstr = "";
+				for (int i=0; i<predicates.Count(); i++) 
+				{
+					cstr = cstr + "(" + predicates [i][0] +" "+predicates [i][1]+" "+predicates [i][2]+ ")";
+					if (i < predicates.Count () - 1)
+						cstr = cstr + "^";
+				}
+				Console.WriteLine ("Unseen Constraint is  "+cstr);
+				List<Instruction> total = tester.symp.satisfyConstraints(envTest, cstr);
+				Console.WriteLine ("Total is "+total.Count());
+				List<Instruction> entire = history.Item2.ToList();
+				foreach(Instruction inst in total)
+					entire.Add(inst);
+
+				if (iterator.children == null || iterator.children.Count() == 0)//iterator is a leaf
+				{
+					if (totalScore > maxScoreLeaf)
+					{
+						output = entire;
+						maxScoreLeaf = totalScore;
+					}
+				}
+
+				Environment iterEnv_ = envTest.makeCopy();
+				foreach (Instruction inst in total)
+					iterEnv_ = tester.sml.execute(inst, iterEnv_);
+				Instruction marker = new Instruction ();
+				marker.setNameDescription ("$Unseen-Verb "+iterator.verb.getName()+" Count = unseen 0",new List<String>());
+				entire.Add(marker);
+				entryThisClause.Add(new Tuple<Environment, List<Instruction>, double>(iterEnv_, entire, totalScore));
+
+				if (init == entryThisClause.Count ())
+					Console.WriteLine ("Nothing much found :( ");
+			}
+			else if(iterator.isCondition || init == entryThisClause.Count())
+			{
+				Instruction marker = new Instruction ();
+				if(iterator.isCondition)
+					marker.setNameDescription ("$Conditional",new List<String>());
+				else if(init == entryThisClause.Count())
+					marker.setNameDescription ("$Stupid Grounding",new List<String>());
+				history.Item2.Add(marker);
+				entryThisClause.Add (history);
+				if (init == entryThisClause.Count ())
+					Console.WriteLine ("Nothing much found :( ");
+			}
+
+			if (output == null)
+			{
+				output = history.Item2;
+				maxScoreLeaf = history.Item3;
+			}
+			return new Tuple<List<Instruction>, int, double>(output, -1, maxScoreLeaf);
+		}
+    }
+}

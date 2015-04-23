@@ -1,0 +1,424 @@
+﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+ * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
+ * working in Cornell Personal Robotics Lab.
+ * 
+ * More details - http://tellmedave.cs.cornell.edu
+ * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
+ */
+
+/*  Notes for future Developers - 
+ *    <no - note >
+ */
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Xml;
+
+namespace ProjectCompton
+{
+    class Learning : Tester
+    {
+        /* Class Description : Defines tools used for learning in this project
+         *  - planning to include : grid search, gradient descent, gradient descent with annealing,
+         *    interface for Joachim's SVM_Struct etc.
+         */
+
+        private Tester testObj = null;
+        private List<int> validation = null;
+        private int evalMetric = 0;
+        private List<Tuple<double[], double>> costWeights = null;  //contains list of all weights and their score, seen so far
+        private int count = 0; //number of weights per iteration
+        private double step;
+        private int stepFineness; //greater the number, more fine it is
+		private XmlTextReader reader = null;
+
+        public Learning(Tester testObj)
+        {
+            //Constructor Definition : Initializes the tester objected
+            this.testObj = testObj;
+            costWeights = new List<Tuple<double[], double>>();
+            this.step = 10;
+            this.stepFineness = 1;
+			if (Constants.cacheReadWeights)
+				this.reader = new XmlTextReader (Constants.rootPath + "weights.xml");
+        }
+
+        private void gradientDescentLossComputation(object param)
+        {
+            /*Function Description : Compute the inferred instruction sequence for validation set
+             * given the testing object tester*/
+
+            List<List<List<double>>> evaluation = new List<List<List<double>>>(); // Method [ Metric [ Scores ] ]
+            for (int i = 0; i < testObj.methods.Count(); i++)
+            {
+                evaluation.Add(new List<List<double>>());
+				for (int mtr = 0; mtr < Metrics.numMetrics; mtr++)
+                    evaluation[i].Add(new List<double>());
+            }
+
+			List<List<double[]>> score = testObj.inference(testObj.methods.Values.ToList(), validation, (List<object>)param);
+
+            for (int mth = 0; mth < this.testObj.methods.Count(); mth++)
+            {
+                for (int mtr = 0; mtr < Metrics.numMetrics; mtr++)
+                    evaluation[mth][mtr] = evaluation[mth][mtr].Concat(score[mth][mtr].ToList()).ToList();
+            }
+
+            double pointScore = 0;
+            /* In case there are multiple algorithms are selected,
+             * the gradient descent works only on the first
+             * selected algorithm. */
+
+            for (int i = 0; i < testObj.methods.Count(); i++)
+            {
+                if (testObj.methods.Values.ToList()[i])
+                {
+                    pointScore = evaluation[i][evalMetric].Average();
+                    break;
+                }
+            }
+
+			double[] wgt = ((Dictionary<String,Double>)((List<object>)param)[4]).Values.ToArray();
+			String eval_string = Global.arrayToString (evaluation[4][evalMetric].ToArray());
+			String wgt_string = Global.arrayToString (wgt);
+
+            lock ("lock")
+            {
+				this.costWeights.Add(new Tuple<double[], double>(wgt, pointScore));
+				//Write result to file
+				System.IO.StreamWriter sw=new System.IO.StreamWriter(Constants.rootPath+"data.txt",true);
+				sw.WriteLine(wgt_string+" gives \n"+eval_string+" score = "+pointScore);
+				sw.Flush ();
+				sw.Close ();
+            }
+        }
+
+		private double[] getNextWeight()
+		{
+			/* Function Description: Fetches next weight from the reader file. The format of the file is - 
+			 * <root>
+			 * 	 <weight>double1,double2,double3,....</weight>
+			 *   <weight>double1,double2,double3,....</weight>
+			 *   .....
+			 * </root>
+			 * */
+			while (reader.Read()) 
+			{
+				switch (reader.NodeType) 
+				{
+					case XmlNodeType.Text:
+											String[] weights = reader.Value.Split (new char[] { ',' });
+											List<double> w = new List<double> ();
+											for (int i=0; i<weights.Length; i++)
+												w.Add (Double.Parse (weights [i]));
+											return w.ToArray ();
+				default:
+					break;
+				}
+			}
+						  
+			throw new ApplicationException ("Not Enough Weights in the cache File");
+		}
+
+        private bool isSeen(double[] pivot)
+        { 
+            /* Function Description : Checks if a weight vector has been seen before.
+             * Returns true/false accordingly */
+
+            for (int i = 0; i < this.costWeights.Count(); i++)
+            {
+                bool same = true;
+				int numFeature = pivot.Length;
+                for (int j = 0; j < numFeature; j++)
+                {
+                    if (this.costWeights[i].Item1[j] != pivot[j])
+                    {
+                        same = false;
+                        break;
+                    }
+                }
+
+                if (same)
+                    return true;
+            }
+            return false;
+        }
+
+        private List<double[]> returnNeighbors(double[] pivot)
+        {
+            /* Function Description : Takes a pivot and computes its neighborhood.
+             * A weight vector x is a neighbor of pivot iff there exists i such that
+             *  x[j] = pivot[j] for all j \ne i
+             *  x[i] \in {pivot[j]-0.5, pivot[j]+0.5 }
+             * */
+
+            List<double[]> ngbr = new List<double[]>();
+            double step = this.step;
+
+			int numFeature = pivot.Length;
+            /*for (int i = 0; i < 2 * numFeature; i++)
+            {
+                if (i / 2 == 6 || i / 2 == 7 || i/2 == 8)
+                    continue;
+                double[] pvt = pivot.ToArray();
+                if (i % 2 == 0)
+                    pvt[i / 2] = pvt[i / 2] + step;
+                else pvt[i / 2] = pvt[i / 2] - step;
+
+                if (!isSeen(pvt))
+                {
+                    this.count++;
+                    ngbr.Add(pvt);
+                }
+            }*/
+			for (int i = 0; i < numFeature; i++)
+			{
+				if (i == 6 || i == 7)
+					continue;
+				double[] pvt = pivot.ToArray();
+				pvt[i] = pvt[i] + step;
+				if (!isSeen(pvt))
+				{
+					this.count++;
+					ngbr.Add(pvt);
+				}
+			}
+            return ngbr;
+        }
+
+        private bool updateStep()
+        {
+            /* Function Description : If we end up finding maxima then we 
+             * want to change the grid size to see if we can make finer searches
+             * if we do change the grid size then we return true else we return false
+             * in which case we call off the search */
+
+            switch (this.stepFineness)
+            {
+                case 1: this.step = 5.0;
+                    this.stepFineness++;
+                    return true;
+                case 2: this.step = 1.0;
+                    this.stepFineness++;
+                    return true;
+                case 3: this.step = 0.1;
+                    this.stepFineness++;
+                    return true;
+                case 4: this.step = 0.01;
+                    this.stepFineness++;
+                    return true;
+                case 5: this.step = 10; //restore
+                    this.stepFineness = 1;
+                    return false;
+                default: //its error
+                    return false;
+            }
+        }
+
+        public void writeCostToFile(System.IO.StreamWriter tw)
+        {
+            /* Function Description: Write the costs to file
+             * iterate over the costWeights in the table and 
+             * write them in the file */
+
+            String data = "";
+			int numFeature = this.costWeights [0].Item1.Length;
+            for (int i = 0; i < this.costWeights.Count(); i++)
+            {
+                data = data + "Weight ";
+                for (int j = 0; j < numFeature; j++)
+                    data = data + costWeights[i].Item1[j];
+                data = data + " AverageAccuracy " + costWeights[i].Item2 + "\n";
+            }
+
+            tw.WriteLine(data);
+        }
+
+        public double[] gradientDescent(List<int> train, int evalMetric)
+        {
+            /* Function Description : Returns weights learned using gradient descent algorithm.
+             *
+             * Input : Datas [train,validation]
+             *         evalMetric 0 : LV, 1 : uWEED, 2: WEED
+             *         
+             * Algorithm in detail - 
+             *             1.  it creates VEIL library for the training corpus
+             *             2.  Maintains a pivot weight  
+             *             3.  find the neighbors of the pivot weight
+             *             4.     in parallel for each neighbor of the pivot weight     
+             *             5.        using the VEIL and inference find the instruction sequence for each point in validation
+             *             6.        compute the average loss function over the entire validation
+             *             7.  if pivot weight is better then return pivot and stop
+             *             8.  else continue with the best neigbhor */
+
+			if (Constants.cacheReadWeights)
+				return this.getNextWeight ();
+
+			testObj.lg.setLowPriority ();
+			List<int> trainOnly = new List<int>();
+			validation = new List<int>();
+            
+            //Create the validation-set and train-only dataset
+            int sizeTrain = (int)(9*train.Count()/10);
+            for (int i = 0; i < train.Count(); i++)
+            {
+                if (i < sizeTrain)
+                    trainOnly.Add(train[i]);
+                else validation.Add(train[i]);
+            }
+
+			Console.WriteLine ("Validation Dataset has size = "+validation.Count());
+			double[] pivot = Enumerable.Repeat (0.0,Features.feature4.Count()).ToArray();//pivot weight
+            double pivotScore = Double.NegativeInfinity; //assuming the defualt pivot is not a local minima, its okay to do so
+
+            int steps = 0, maxStep = 25;
+            this.testObj.constructDataStructure(trainOnly); // VEIL Dataset creation phase
+
+            while (steps < maxStep) //we dont want the algorithm to run forever even if it does not find optima
+            {
+                List<double[]> grid = this.returnNeighbors(pivot);  //Use pivot to define a local neighborhood of unseen points
+                List<Thread> threads = new List<Thread>();
+				Console.WriteLine ("Step  = " + steps + " of atmost MaxStep = " + maxStep);
+                int batchSize = 10;
+                int numBatches = grid.Count()/batchSize;
+                if (grid.Count() % batchSize != 0)
+                    numBatches++;
+                
+                for (int batch = 0; batch < numBatches; batch++) //execute them in batches
+                {
+                    for (int i=0; i < batchSize; i++) // executed in parallel
+                    {
+                        if(batch*batchSize + i >= grid.Count())
+                            break;
+
+						Dictionary<String,Double> dict = testObj.inf.initDict (grid [batch * batchSize + i]);
+						List<object> param = new List<object> () { null, null, null, null, (object)dict };
+						Thread singleWt = new Thread(this.gradientDescentLossComputation);
+                        singleWt.Start((object)param);
+                        threads.Add(singleWt);
+                    }
+
+                    foreach (var thread in threads)
+                    {
+                        thread.Join();
+                    }
+                }
+               
+                //find the new pivot
+                int iter = -1;
+                for (int i = 0; i < count; i++)
+                {
+                    if (this.costWeights[this.costWeights.Count() - i - 1].Item2 > pivotScore)
+                    {
+                        pivotScore = this.costWeights[this.costWeights.Count() - i - 1].Item2;
+                        iter = i;
+                    }
+                }
+
+                count = 0;
+                if (iter == -1) //the pivot remains same
+                {
+                    if (!this.updateStep()) //keep making the step-size(a.k.a. grid-size) finer until its too fine that we give up 
+                    {
+                        this.testObj.destroyer();
+						this.testObj.lg.setHighPriority (); //print the weights
+						foreach(Tuple<double[], double> w in this.costWeights)
+							this.testObj.lg.writeToFile ("<span style='color:blue;'> Weight = "+Global.arrayToString(w.Item1)+" = "+w.Item2.ToString()+"</span><br/>");
+                        return pivot;  //pvt is the local optima
+                    }
+                }
+                else
+                    pivot = costWeights[this.costWeights.Count() - iter - 1].Item1;
+				Console.WriteLine ("Weight "+Global.arrayToString(pivot)+"Step = "+this.step+" Score "+pivotScore);
+                steps++;
+            }
+
+			//Run the algorithm once on the validation set and see the results
+			this.testObj.lg.setHighPriority ();
+			/*this.lg.writeToFile ("<h4>Results on Validation DataSet</h4>");
+			Console.WriteLine ("Showing Results on Validation DataSet");
+			Dictionary<String,Double> dict_ = testObj.inf.initDict (pivot);
+			List<object> param_ = new List<object> () { null, null, null, null, (object)dict_};
+			testObj.inference(testObj.methods.Values.ToList(), validation, (List<object>)param_);
+			this.lg.writeToFile ("<br/><br/>");*/
+            this.testObj.destroyer();
+
+			foreach(Tuple<double[], double> w in this.costWeights)//print the weights
+				this.testObj.lg.writeToFile ("<span style='color:blue;'> Weight = "+Global.arrayToString(w.Item1)+" = "+w.Item2.ToString()+"</span><br/>");
+            return pivot;
+		}
+
+        public double[] gridSearch(List<int> train, int evalMetric)
+        {
+            /* Function Description : Returns weights learned using gradient descent algorithm.
+             *
+             * Input : Datas [train,validation]
+             *         evalMetric 0 : LV, 1 : uWEED, 2: WEED
+             *         
+             * Algorithm in detail - 
+             *             1.  Search for best answer from a given grid
+             *             2.  Grid is run in parallel
+             *             2.  Test on validation set
+             *             3.  Return the weight that yielded the best result
+             */
+
+			if (Constants.cacheReadWeights)
+				return this.getNextWeight ();
+
+            List<int> trainOnly = new List<int>();
+            validation = new List<int>();
+
+            //Create the validation-set and train-only dataset
+            int sizeTrain = 7 * train.Count() / 10;
+            for (int i = 0; i < train.Count(); i++)
+            {
+                if (i < sizeTrain)
+                    trainOnly.Add(train[i]);
+                else validation.Add(train[i]);
+            }
+
+            this.testObj.constructDataStructure(trainOnly); // VEIL Dataset creation phase
+
+            List<double[]> grid = new List<double[]>();
+            #region create_grid_here
+            //this.testObj.inf_.getWeights();
+            #endregion
+
+            List<Thread> threads = new List<Thread>();
+
+            int batchSize = 10;
+            int numBatches = grid.Count() / batchSize;
+            if (grid.Count() % batchSize != 0)
+                numBatches++;
+
+            for (int batch = 0; batch < numBatches; batch++) //execute them in batches
+            {
+                for (int i = 0; i < batchSize; i++) // executed in parallel
+                {
+                    if (batch * batchSize + i >= grid.Count())
+                        break;
+					Dictionary<String,Double> dict = testObj.inf.initDict (grid [batch * batchSize + i]);
+					List<object> param = new List<object>(){null,null,null,null,(object)dict};
+                    Thread singleWt = new Thread(this.gradientDescentLossComputation);
+					singleWt.Start((object)param);
+                    threads.Add(singleWt);
+                }
+
+                foreach (var thread in threads)
+                {
+                    thread.Join();
+                }
+            }
+
+            //output the best weight
+            this.costWeights.Sort((a, b) => b.Item2.CompareTo(a.Item2));
+
+            this.testObj.destroyer();
+            return this.costWeights[0].Item1;
+        }
+    }
+}
