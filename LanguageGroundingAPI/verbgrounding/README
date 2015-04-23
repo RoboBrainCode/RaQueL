@@ -1,0 +1,15 @@
+@Dipendra: Temporary README
+
+Please set the paths in these position:
+
+Constants.cs
+internal static string rootPath = "/home/robo328b/dipendra_tellmedave/ProjectCompton/"; 
+//path to ProjectCompton folder containing the data
+internal static string UBLPath = @"/home/robo328b/dipendra_tellmedave/LambdaExpression/"
+//path to the LambdaExpression folder
+
+WordsMatching SentenceSimilarity.cs
+this.path = "/home/robo328b/dipendra_tellmedave/";
+//map it either to the folder containing the dict folder of the WordNet
+Wnlib.WNCommon.path = path + /*"verbgrounding/wordnetdotnet/dict/";*/"dict/";
+//should point to the dict folder of the WordNet
