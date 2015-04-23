@@ -33,7 +33,6 @@ namespace ProjectCompton
          * metric like uWEED or WEED.*/
 
         Tester testObj = null;
-        //public static List<String> MetricList = new List<string>() { "LV","uWEED","WEED"};
 		public static int numMetrics = Enum.GetNames(typeof(MetricList)).Length;
 
         public Metrics(Tester testObj)

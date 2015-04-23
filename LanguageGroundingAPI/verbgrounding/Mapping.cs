@@ -15,7 +15,7 @@ namespace ProjectCompton
 		}
 
 
-		public Tuple<int[], Double, String> mappingPredicates(VeilTemplate vtmp, Clause clTest, Environment envTest, List<Instruction> instPrev, Dictionary<String, Double> weights)
+		public Tuple<int[], Double, String> mappingPredicates(LexicalEntry vtmp, Clause clTest, Environment envTest, List<Instruction> instPrev, Dictionary<String, Double> weights)
 		{
 			/* Function Description: Finds a 'good' mapping from variables in eq to objects in envTest.
              * This is done by converting it into a queadratic optimization problem with convex hull 
@@ -408,6 +408,7 @@ namespace ProjectCompton
 			Tuple<double[], double> res = qps.solve();
 
 			double[] map = res.Item1;
+			//this.inf.lg.writeToFile("Mapping map "+String.Join(", ",map));
 			#endregion
 
 			#region discretize
@@ -460,7 +461,7 @@ namespace ProjectCompton
 			return new Tuple<int[], double, String> (map_, discreteScore/*res.Item2 / (z * envTestN + Constants.epsilon)*/, log);
 		}
 
-		public static Dictionary<String,Double> getMappingFeatures(VeilTemplate vtmp, Clause clTest, Environment envTest, 
+		public static Dictionary<String,Double> getMappingFeatures(LexicalEntry vtmp, Clause clTest, Environment envTest, 
 		                                                           Inference inf, int[] map, List<Instruction> instPrev)
 		{
 			/* Function Description: Given mapping, compute the mapping features:
@@ -518,7 +519,7 @@ namespace ProjectCompton
 			return dict;
 		}
 
-		public int[] mappingMisra2014(VeilTemplate vtmp, Clause clTest, Environment env, double[,] leCorrMatrix, Logger lg)
+		public int[] mappingMisra2014(LexicalEntry vtmp, Clause clTest, Environment env, double[,] leCorrMatrix, Logger lg)
 		{
 			/* Function Description: Misra et al. 2014 use a mapping based on three rules ---
              * 1. Relationship: If there exists x1, x2 in eq.cls and y1, y2  in clTest such that rho(x1, x2) = rho(y1,y2)

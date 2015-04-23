@@ -44,7 +44,6 @@ namespace ProjectCompton
 		public List<Tuple<int, int, String>> relativePosition{ get; private set;} //Relative Position of the objects i.e. Rel(x,y) holds [note not symmetric]
 		public List<Tuple<Object, Object, SpatialRelation>> relationshipMatrix{ get; private set;} //RelationShip Matrix {(x,y,rel)} means x is in relationship rel with respect to y
                                                                                                                     // examples of relationship is - Inside Mug Fridge, Grasping Robot Cup, ....... 
-        private Robot rbt;
         private String relFileName = null;
 
 		public Environment()
@@ -59,7 +58,6 @@ namespace ProjectCompton
         {
             /*Function Description : display the states of the environment*/
             lg.writeToFile("<div id='environment'> <b>Displaying Environment</b> <br/>");
-            this.rbt.display(lg);
             foreach (Object ob in this.objects)
             {
                 lg.writeToFile("<div> <button onclick='show(this)'>Object : " + ob.uniqueName + " </button> <div style='display:none;'>");
@@ -99,8 +97,6 @@ namespace ProjectCompton
                 env.relationshipMatrix.Add(new Tuple<Object, Object, SpatialRelation>(first, second, sp.Item3));
             }
 
-            env.rbt = new Robot();
-            this.rbt.copyRobot(env.rbt, env);
 			return env;
         }
 
@@ -267,20 +263,6 @@ namespace ProjectCompton
                 }
             }
             return false;
-        }
-
-        public void nullifyDueToMotion()
-        {
-            /* Function Description : If the robot walks then some objects
-             * will get distored, for example : imagine robot holding a cup 
-             * which is under the tap and then the robot walks to a different
-             * place. Robot walks when it keeps stuff or when it uses walk routine.*/
-            Object left = this.rbt.returnLeftHandObject();
-            Object right = this.rbt.returnRightHandObject();
-            if (left != null)
-                this.nullifyObjectsRelation(left);
-            if (right != null)
-                this.nullifyObjectsRelation(right);
         }
 
         public void nullifyObjectsRelation(Object obj)
@@ -458,7 +440,7 @@ namespace ProjectCompton
 			return predicates;
 		}
 
-        public void loadEnvironment(String relFileName)
+        public void loadEnvironment(String envFileName)
         {
             /* Function Description : Environment in version 3 and up are represented
              * by xml structure. This function loads data from the xml file. The format
@@ -482,13 +464,11 @@ namespace ProjectCompton
              * different static attributes like color. 
              */
 
-            XmlTextReader reader = new XmlTextReader(Constants.rootPath + "VEIL500/Environment/"+relFileName);
+            XmlTextReader reader = new XmlTextReader(Constants.rootPath + Constants.dataFolder+"/Environment/"+envFileName);
 
             Object obj = null;
             String currentStateName = null, currentStateValue = null;
-            this.relFileName = relFileName;
-            this.rbt = new Robot();
-            this.rbt.moveRobot(0, 0);
+            this.relFileName = envFileName;
             Object rbt = new Object();
             rbt.uniqueName = "Robot";
             this.objects.Add(rbt); //I believe Robot should be a subclass of type object
@@ -554,8 +534,8 @@ namespace ProjectCompton
                         }
                         if (reader.Name.Equals("object"))
                         {
-                            if (obj.uniqueName.Equals("Camera1") || obj.uniqueName.Equals("camera_1"))
-                                this.rbt.moveRobot(obj.centroidX_, obj.centroidY_);
+							if (obj.uniqueName.Equals ("Camera1") || obj.uniqueName.Equals ("camera_1"))
+							;//this.rbt.moveRobot(obj.centroidX_, obj.centroidY_);
                             else
                             {
                                 Object tmp = obj;
@@ -584,7 +564,7 @@ namespace ProjectCompton
 						channelcount++;
 				}
 				if (channelcount > 1)
-					throw new ApplicationException ("More than one channel on in "+relFileName);
+					throw new ApplicationException ("More than one channel on in "+envFileName);
 			}
 
 			this.bootstrapSpatialRelationship ();
@@ -966,7 +946,7 @@ namespace ProjectCompton
 							int lastReference = -1;
 							for(int iter = instPrev.Count()-1;iter >=0;iter--)
 							{
-								if (instPrev [iter].getDescription ().Contains (this.objects [j].uniqueName)) 
+								if (instPrev [iter].getArguments ().Contains (this.objects [j].uniqueName)) 
 								{
 									lastReference = iter;
 									break;

@@ -118,7 +118,7 @@ namespace ProjectCompton
             /* FunctionDescription : Computes its bag of feature cost */
 
             List<String> instW = new List<string>() { this.node.getControllerFunction() };
-            List<String> dscps = this.node.getDescription();
+            List<String> dscps = this.node.getArguments();
             foreach (String dscp in dscps)
                 instW.Add(dscp);
 

@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-//@Dipendra - please check the time complexity of checkInclusion(s,t)
 
 namespace ProjectCompton
 {
@@ -13,20 +12,12 @@ namespace ProjectCompton
         /*Class Description : This class represents the syntactic data-structure*/
 
         private static List<String> verbSpace = new List<string>() { "Microwav", "Microwave", "Plac", "Place", "Ignit", "Tak", "Add" ,"Take"}; //list of all verbs that it has seen
-        private static List<String> nounSpace = new List<string>(); //list of all nouns/pronouns that it has seen
 
         private string type = null, name = null;
         private SyntacticTree parent = null;
         private List<SyntacticTree> children = new List<SyntacticTree>();
 
-        public void dummyNode(String name)
-        {
-            /*Function Description : Makes a dummy node*/
-            this.type = "Dummy";
-            this.name = name.ToString();
-        }
-
-        public SyntacticTree makeCopy()
+       	public SyntacticTree makeCopy()
         {
             /* Function Description : Makes and returns the copy*/
             SyntacticTree st = new SyntacticTree();

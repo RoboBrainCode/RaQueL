@@ -33,12 +33,13 @@ namespace ProjectCompton
             this.preConditions = new List<Tuple<String, List<String>, Expression>>();
             this.effect = new List<Tuple<String, List<String>, Expression>>();
 			String[] lines = null; 
-			if(Constants.usingLinux)
-				lines = System.IO.File.ReadAllLines(Constants.rootPath + @"VEIL500/Environment/domainKnowledge.pddl");
-			else lines = System.IO.File.ReadAllLines(Constants.rootPath + @"VEIL500\Environment\domainKnowledge.pddl");
+			if (Constants.usingLinux)
+				lines = System.IO.File.ReadAllLines (Constants.rootPath + Constants.dataFolder + @"/Environment/domainKnowledge.pddl");
+			else lines = System.IO.File.ReadAllLines (Constants.rootPath + Constants.dataFolder + @"\Environment\domainKnowledge.pddl");
 
             String actionName = null;
             List<String> variables = new List<string>();
+
             for (int i = 0; i < lines.Count(); i++)
             {
                 if (lines[i].StartsWith("(:action"))
@@ -68,7 +69,7 @@ namespace ProjectCompton
                 if (lines[i].StartsWith(":effect"))
                 {
                     String effect = "";
-                    while (lines[i].Trim().Count() != 0)
+					while (i < lines.Count() && lines[i].Trim().Count() != 0)
                     {
                         effect = effect + lines[i];
                         i++;
@@ -76,7 +77,6 @@ namespace ProjectCompton
                     Expression exp = new Expression(effect);
                     this.effect.Add(new Tuple<String, List<String>, Expression>(actionName, variables, exp));
                 }
-
             }
 
             /* Special Cases
@@ -95,7 +95,10 @@ namespace ProjectCompton
              * is converted to Keep_on_sink cup. */
 
             String cf = inst.getControllerFunction();
-            List<String> dscp = inst.getDescription();
+            List<String> dscp = inst.getArguments();
+
+			if (!Constants.dataFolder.Equals ("VEIL500")) 
+				return new Tuple<string, List<string>> (cf, dscp);
 
             if (cf.Equals("press") || cf.Equals("open") || cf.Equals("close") || cf.Equals("turn"))
                 return new Tuple<string, List<string>>(cf + "_" + dscp[0], new List<String>());
@@ -134,7 +137,7 @@ namespace ProjectCompton
 
 			List<String> affordances = new List<String>();
 			List<String> dscpCover = new List<String>();
-			List<String> dscpL = inst.getDescription();
+			List<String> dscpL = inst.getArguments();
 
 			foreach(Tuple<String, List<String>, Expression> pc in this.preConditions)
 			{
@@ -163,28 +166,6 @@ namespace ProjectCompton
 			}
 
 			return affordances; //variable has to satisfy these affordances
-		}
-
-		public List<String> getSpecialObj(Instruction inst, int which)
-		{
-			/* Function Description: Some variables can take special values
-			 * eg: turn ?x maps to turn Sink, turn Stove etc. hence even though
-			 * there are no affordance constraints but there is the constraint that
-			 * it must map to one of thse objects */
-
-			List<String> specialObj = new List<String>();
-			String cf = inst.getControllerFunction ();
-			if (which == 0 && (cf.Equals ("press") || cf.Equals ("open") || cf.Equals ("close") || cf.Equals ("turn")||cf.Equals ("add") || cf.Equals ("place"))) 
-			{
-				foreach (Tuple<String, List<String>, Expression> pc in this.preConditions) 
-				{
-					if (pc.Item1.StartsWith (cf))
-						specialObj.Add (pc.Item1.Substring (pc.Item1.IndexOf ('_') + 1));
-				}
-				return specialObj; //variable can be one of these objects
-			}
-
-			return null;
 		}
 
         public Tuple<double, string, string> satSyntConstraints(Instruction inst, Environment present)
@@ -243,12 +224,15 @@ namespace ProjectCompton
 				present = env.makeCopy ();
 			else present = env;
 
+			Console.WriteLine ("Instruction is " + inst.getControllerFunction () + " and " + String.Join (",", inst.getArguments ()));
 			Tuple<String,List<String>> alias = this.getInstructionAlias(inst);
+			Console.WriteLine ("Alias " + alias.Item1 + " and " + String.Join(" ",alias.Item2));
 			bool found = false;
 			foreach (Tuple<String, List<String>, Expression> eff in this.effect)
 			{
 				if (eff.Item1.Equals(alias.Item1, StringComparison.OrdinalIgnoreCase))
 				{
+					Console.WriteLine ("Matched with var-" + String.Join (",", eff.Item2));
 					List<Tuple<String, String>> map = new List<Tuple<String, String>>();//define the map
 					if (alias.Item2.Count() != eff.Item2.Count()) //overloading is allowed in pddl rules
 						continue;
@@ -268,7 +252,7 @@ namespace ProjectCompton
 
 		public Environment executeList(List<Instruction> inst, Environment env, bool force=true)
 		{
-			/*Function Descriptions: Executes these instructions on env environment
+			/* Function Descriptions: Executes these instructions on env environment
 			 * and returns the final environment */
 			Environment copy = env.makeCopy ();
 

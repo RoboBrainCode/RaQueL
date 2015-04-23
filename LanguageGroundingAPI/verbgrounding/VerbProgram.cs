@@ -24,14 +24,14 @@ namespace ProjectCompton
          * This class handles this structure and objects of this class are learned.*/
 
         public String verbName {private set; get;} //name of the verb example : boil, ignite, place etc.
-        public List<VeilTemplate> program {private set; get;}
+        public List<LexicalEntry> program {private set; get;}
 		public List<Tuple<String,int>> predicateFreq = new List<Tuple<string, int>> ();//number of times a predicate is fired
 
         public VerbProgram(String verbName)
         {
             /*Constructor Description : initialize verb name*/
             this.verbName = verbName;
-            this.program = new List<VeilTemplate>();
+            this.program = new List<LexicalEntry>();
         }
 
         public string getName()
@@ -46,7 +46,7 @@ namespace ProjectCompton
             return "( Entry "+ this.program[i].entryIndex + " )";
         }
 
-        public List<VeilTemplate> getProgram()
+        public List<LexicalEntry> getProgram()
         {
             /*Function Description : Returns the program*/
             return this.program;
@@ -68,7 +68,7 @@ namespace ProjectCompton
 				return "(" + ret + ")";
 		}
 
-        public void add(VeilTemplate vtmp)
+        public void add(LexicalEntry vtmp)
         {
             /* Function Description: Does the following - 
              * 1. Add the new template to the list

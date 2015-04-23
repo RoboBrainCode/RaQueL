@@ -414,9 +414,9 @@ namespace ProjectCompton
 				String output = "", error = "";
                 
 				if (Constants.usingLinux)
-					this.proc.StartInfo.Arguments = string.Format ("-r 12 -P 0 -m 4000 " + Constants.rootPath + "VEIL500/Environment/domainKnowledge.pddl " + Constants.rootPath + "Log/domains" + Thread.CurrentThread.ManagedThreadId + ".pddl");
+					this.proc.StartInfo.Arguments = string.Format ("-r 12 -P 0 -m 4000 " + Constants.rootPath + Constants.dataFolder+"/Environment/domainKnowledge.pddl " + Constants.rootPath + "Log/domains" + Thread.CurrentThread.ManagedThreadId + ".pddl");
 				else
-					this.proc.StartInfo.Arguments = string.Format ("-r 10 -P 0 -m 4000 "+Constants.rootPath+"VEIL500/Environment/domainKnowledge.pddl "+Constants.rootPath+"Log/domains" + Thread.CurrentThread.ManagedThreadId + ".pddl");
+					this.proc.StartInfo.Arguments = string.Format ("-r 10 -P 0 -m 4000 "+Constants.rootPath+Constants.dataFolder+"/Environment/domainKnowledge.pddl "+Constants.rootPath+"Log/domains" + Thread.CurrentThread.ManagedThreadId + ".pddl");
 				this.proc.Start ();
 				this.proc.WaitForExit ();
 				for (int i = 0; i < 100; i++)
@@ -486,41 +486,49 @@ namespace ProjectCompton
             String[] token = oneString.Split(new char[] { '(', ',', ')' }, StringSplitOptions.RemoveEmptyEntries);
 
             String actionName = token[0];
-            List<String> description = new List<String>();
+            List<String> arguments = new List<String>();
 
-            if (token[0].StartsWith("press") || token[0].StartsWith("turn") || token[0].StartsWith("open") || token[0].StartsWith("close") || token[0].StartsWith("add") || token[0].StartsWith("place"))
-            {
-                int first_ = token[0].IndexOf('_');
-                actionName = token[0].Substring(0, first_);
-                description.Add(Global.firstCharToUpper(token[0].Substring(first_ + 1)));
-                for (int i = 1; i < token.Count(); i++)
-                    description.Add(Global.firstCharToUpper(token[i]));
-            }
-            else if (token[0].StartsWith("keep") && !token[0].Equals("keep"))
-            {
-                int first_ = token[0].IndexOf('_');
-                actionName = token[0].Substring(0, first_);
-                int second_ = token[0].Substring(first_ + 1).IndexOf('_');
-                description.Add(Global.firstCharToUpper(token[1]));
-                description.Add(Global.firstCharToUpper(token[0].Substring(first_ + 1, second_)));
-				description.Add (Global.firstCharToUpper (token [0].Substring (first_ + second_ + 2)));
-            }
+			if (Constants.dataFolder.Equals ("VEIL500")) 
+			{
+				if (token [0].StartsWith ("press") || token [0].StartsWith ("turn") || token [0].StartsWith ("open") || token [0].StartsWith ("close") || token [0].StartsWith ("add") || token [0].StartsWith ("place")) 
+				{
+					int first_ = token [0].IndexOf ('_');
+					actionName = token [0].Substring (0, first_);
+					arguments.Add (Global.firstCharToUpper (token [0].Substring (first_ + 1)));
+					for (int i = 1; i < token.Count(); i++)
+						arguments.Add (Global.firstCharToUpper (token [i]));
+				}
+				else if (token [0].StartsWith ("keep") && !token [0].Equals ("keep")) 
+				{
+					int first_ = token [0].IndexOf ('_');
+					actionName = token [0].Substring (0, first_);
+					int second_ = token [0].Substring (first_ + 1).IndexOf ('_');
+					arguments.Add (Global.firstCharToUpper (token [1]));
+					arguments.Add (Global.firstCharToUpper (token [0].Substring (first_ + 1, second_)));
+					arguments.Add (Global.firstCharToUpper (token [0].Substring (first_ + second_ + 2)));
+				}
+				else
+				{
+					for (int i = 1; i < token.Count(); i++)
+						arguments.Add(Global.firstCharToUpper(token[i]));
+				}
+			}
             else
             {
                 for (int i = 1; i < token.Count(); i++)
-                    description.Add(Global.firstCharToUpper(token[i]));
+                    arguments.Add(Global.firstCharToUpper(token[i]));
             }
 
-            for (int i = 0; i < description.Count(); i++)
+            for (int i = 0; i < arguments.Count(); i++)
             {
                 foreach (Object obj in env.objects)
                 {
-                    if (obj.uniqueName.Equals(description[i], StringComparison.OrdinalIgnoreCase))
-                        description[i] = obj.uniqueName;
+                    if (obj.uniqueName.Equals(arguments[i], StringComparison.OrdinalIgnoreCase))
+                        arguments[i] = obj.uniqueName;
                 }
             }
 
-            return new Instruction(actionName, description);
+            return new Instruction(actionName, arguments);
         }
 
 		private bool validate(List<Instruction> inst, Environment env)

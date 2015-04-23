@@ -24,10 +24,8 @@ namespace ProjectCompton
     {
         /*Class Description : Defines properties of an elementary instruction.*/
 
-        private String instructName = null;
         private String controllerInstruction = null;
-        private List<String> description = new List<string>();
-        private List<String> oldDescription = new List<string>();
+        private List<String> arguments = new List<string>();
 
         public Instruction()
         {
@@ -39,48 +37,29 @@ namespace ProjectCompton
             /* Constructor Description: Given controllerInstruction and description, 
              * intialize the variables */
             this.controllerInstruction = controllerInstruction;
-            this.description = description;
+            this.arguments = description;
         }
 
         public String getName()
         {
             /*Function Description : Returns name*/
-            //if (instructName == null)
-            //    return " NULL ";
             String name = this.controllerInstruction;
-            foreach (String dscp in this.description)
+            foreach (String dscp in this.arguments)
                 name = name + " " + dscp;
             return name;
         }
 
         public void setNameDescription(String ctrlFunc, List<String> descp)
         {
-            this.instructName = ctrlFunc;
-            foreach(String tmp in descp)
-            {
-                this.instructName = this.instructName + " " + tmp;
-            }
             this.controllerInstruction = ctrlFunc;
-            this.description = descp;
+            this.arguments = descp;
         }
 
         public Instruction makeCopy()
         {
             /*Function Description : Makes a copy*/
             Instruction newCopy = new Instruction();
-            newCopy.description = this.description.ToList();
-            newCopy.oldDescription = this.oldDescription.ToList(); //this.description.ToList();
-            newCopy.controllerInstruction = this.controllerInstruction;
-            newCopy.instructName = this.instructName;
-            return newCopy;
-        }
-
-        public Instruction makeCopyAndRevert()
-        {
-            /*Function Description : Makes and reverts the description*/
-            Instruction newCopy = new Instruction();
-            newCopy.description = this.oldDescription.ToList();
-            newCopy.oldDescription = this.oldDescription.ToList();
+            newCopy.arguments = this.arguments.ToList();
             newCopy.controllerInstruction = this.controllerInstruction;
             return newCopy;
         }
@@ -94,57 +73,13 @@ namespace ProjectCompton
         public double norm()
         {
             /*Function Description: Returns the norm or description length of this instruction*/ 
-			return 1 + this.description.Count ();
+			return 1 + this.arguments.Count ();
         }
 
-        public Instruction makeCopyAndInstantiate(List<Tuple<String, String>> matching)
-        {
-            /* Function Description : Make a new copy and instantiate it using the 
-             * matching. */
-
-            Instruction inst = new Instruction();
-            inst.controllerInstruction = this.controllerInstruction;
-            for (int i = 0; i < this.description.Count(); i++)
-            {
-                String original = this.oldDescription[i];
-                foreach (Tuple<String, String> tmp in matching)
-                {
-                    if (tmp.Item1.Equals(original, StringComparison.OrdinalIgnoreCase))
-                        inst.description.Add(tmp.Item2);
-                }
-            }
-            return inst;
-        }
-
-        public Instruction makeCopyAndInstantiateTemplate(List<Tuple<String, String>> matching)
-        {
-            /* Function Description : Make a new copy and instantiate it using the 
-             * matching for the template alg.*/
-
-            Instruction inst = new Instruction();
-            inst.controllerInstruction = this.controllerInstruction;
-            for (int i = 0; i < this.description.Count(); i++)
-            {
-                String original = this.description[i];
-                bool added = false;
-                foreach (Tuple<String, String> tmp in matching)
-                {
-                    if (tmp.Item1.Equals(original, StringComparison.OrdinalIgnoreCase))
-                    {
-                        added = true;
-                        inst.description.Add(tmp.Item2);
-                    }
-                }
-                if (!added)
-                    inst.description.Add(original);
-            }
-            return inst;
-        }
-
-        public List<String> getDescription()
+        public List<String> getArguments()
         {
             /*Function Description : Returns the function description*/
-            return this.description;
+            return this.arguments;
         }
 
         public void parse(String instruction, Logger lg)
@@ -166,7 +101,7 @@ namespace ProjectCompton
             
 			bool matched = false, found = false;
 			int numParam = 0;
-            XmlTextReader reader = new XmlTextReader(Constants.rootPath+"VEIL500/ControllerInstructions.xml");
+			XmlTextReader reader = new XmlTextReader (Constants.rootPath + Constants.dataFolder + "/ControllerInstructions.xml");
             while (reader.Read())
             {
                 switch (reader.NodeType)
@@ -191,11 +126,9 @@ namespace ProjectCompton
                         {
                             if (matched && numParam==len-1) //parsing matched
                             {
-                                this.instructName = instruction;
                                 this.controllerInstruction = words[0].ToLower();
                                 for (int i = 1; i < len; i++)
-									this.description.Add(Global.standardize(Global.firstCharToUpper(words[i]))); //object-name is always capitalized
-                                this.oldDescription = this.description.ToList();
+									this.arguments.Add(Global.standardize(Global.firstCharToUpper(words[i]))); //object-name is always capitalized
 								found = true;
                             } //else index=0 and next instruction pattern shall be tried
                         }
@@ -216,85 +149,7 @@ namespace ProjectCompton
         {
             /* Function Description : Replace the whichParam parameter by
              * newParamVal */
-            this.description[whichParam] = newParamVal;
-        }
-
-        public int generalizeRemaining(Clause cl, int wcount)
-        {
-            /* Function Description : Generalizes all remaining instances by 
-             * variables $w's*/
-            for (int i = 0; i < description.Count(); i++)
-            {
-                if (description[i][0] != '$') //does not start with $ 
-                {
-                    //check if oldDescription[i] already exists in the clause as a noun object
-                    String n=cl.isExist(oldDescription[i]);
-                    if (n == null)
-                    {
-                        //does not exist, so add it 
-                        SyntacticTree newW = new SyntacticTree();
-                        newW.dummyNode("$w" + wcount);
-                        description[i] = "$w" + wcount;
-                        wcount++;
-
-                        SyntacticTree grounding = new SyntacticTree();
-                        grounding.dummyNode(oldDescription[i]);
-
-                        cl.addNoun(newW);
-                        cl.addOriginalCopy(grounding);
-                    }
-                    //else it already exists so need to do anything
-                    //generalize the description in either case
-                    else description[i] = n;
-                }
-            }
-            return wcount + 1;
-        }
-
-        public void instantiation(String variable, String instance)
-        {
-            /* Function Description : Instantiates the instruction
-             * by replacing variables with instants. Example 
-             * Find $v1                to          Find Table
-             * Move $v1 $v2            to          Move Cup Table
-             */
-            /*Regex regEx = new Regex(variable, RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            this.instructName = regEx.Replace(this.instructName, instance);*/
-
-            for (int i = 0; i < this.description.Count(); i++)
-            {
-                if (this.description[i].Equals(variable, StringComparison.OrdinalIgnoreCase))
-                {
-                    this.description[i] = instance;
-                }
-            }
-        }
-
-        public void priorInstantiation()
-        {
-            /* Function Description : checks if any description is still of $ form and if yes
-             * then it initializes it using the prior instantiation*/
-            for (int i = 0; i < description.Count(); i++)
-            {
-                if (description[i].StartsWith("$"))
-                {
-                    description[i] = oldDescription[i];
-                }
-            }
-        }
-
-        public void dummyPriorInstantiation(List<Tuple<String,String>> matching, List<string> matchedObjects)
-        {
-            /* Function Description : finds if $vi exists and if it does then adds
-             * the (oldDescription,oldDescription) to matching*/
-            for (int i = 0; i < description.Count(); i++)
-            {
-                if (!Global.isPresent(matchedObjects,oldDescription[i])) //if $v2 belongs to machtedObjects then don't change
-                {
-                    matching.Add(new Tuple<string, string>(oldDescription[i], oldDescription[i]));
-                    matchedObjects.Add(oldDescription[i]);
-                }
-            }
+            this.arguments[whichParam] = newParamVal;
         }
 
         public bool compare(Instruction inst)
@@ -303,24 +158,18 @@ namespace ProjectCompton
              * Returns true if equal else false*/
 
             if (!this.controllerInstruction.Equals(inst.controllerInstruction, StringComparison.OrdinalIgnoreCase))
-            {
                 return false;
-            }
 
-            if (this.description.Count() != inst.description.Count())
-            {
+            if (this.arguments.Count() != inst.arguments.Count())
                 return false;
-            }
 
-            for (int i = 0; i < this.description.Count();i++)
+            for (int i = 0; i < this.arguments.Count();i++)
             {
-                if (!this.description[i].Equals(inst.description[i], StringComparison.OrdinalIgnoreCase))
+                if (!this.arguments[i].Equals(inst.arguments[i], StringComparison.OrdinalIgnoreCase))
                 {
-                    if (this.description[i].StartsWith("stove_1Knob") && inst.description[i].StartsWith("stove_1Knob")
-                      || this.description[i].StartsWith("stove_1Burner") && inst.description[i].StartsWith("stove_1Burner"))
-                    {
+                    if (this.arguments[i].StartsWith("stove_1Knob") && inst.arguments[i].StartsWith("stove_1Knob")
+                      || this.arguments[i].StartsWith("stove_1Burner") && inst.arguments[i].StartsWith("stove_1Burner"))
                         continue;
-                    }
                     return false;
                 }
             }
@@ -332,13 +181,13 @@ namespace ProjectCompton
             // Function Description: Return those parameters which are objects
             
 			//hack designed for current set of functions
-			switch (this.description.Count ()) 
+			switch (this.arguments.Count ()) 
 			{
-				case 0:  return this.description;
-				case 1:  return this.description;
-				case 2:  return this.description;
-				case 3:  return new List<String>(){this.description[0],this.description[2]};
-				default: throw new ApplicationException ("What new devilry is this");
+				case 0:  return this.arguments;
+				case 1:  return this.arguments;
+				case 2:  return this.arguments;
+				case 3:  return new List<String>(){this.arguments[0],this.arguments[2]};
+				default: throw new ApplicationException ("Instruction with more than 3 arguments.");
 			}
         }
 
@@ -357,18 +206,9 @@ namespace ProjectCompton
         {
             /*Function Description : Display the instruction*/
             String write = "<span style='color:red'>" + this.controllerInstruction + "</span>";
-            foreach (String s in this.description)
+            foreach (String s in this.arguments)
                 write = write + " " + s;
             lg.writeToFile(write+"<br/>");
-        }
-
-        public void displayInterpolation(Logger lg)
-        {
-            /*Function Description : Display the instruction*/
-            String write = "<span style='color:blue'>" + this.controllerInstruction + "</span>";
-            foreach (String s in this.description)
-                write = write + " " + s;
-            lg.writeToFile(write + "<br/>");
         }
 
     }

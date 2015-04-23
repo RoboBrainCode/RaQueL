@@ -271,7 +271,7 @@ namespace ProjectCompton
 		{
 			/* Function Description: Returns the features and cost of the ground-truth constraint*/
 
-			VerbProgram v = tester.veil.Find(veil_ => veil_.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase));
+			VerbProgram v = tester.lexicon.Find(veil_ => veil_.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase));
 			Dictionary<String, double> features = tester.inf.ftr.getNullDictionary (6);
 
 			/* Compute Feature Vector
@@ -332,7 +332,7 @@ namespace ProjectCompton
 			return new Tuple<double[], double>(features.Values.ToArray(),totalScore);
 		}
 
-		private int[] findMap(String constraint, VeilTemplate vt, Environment env)
+		private int[] findMap(String constraint, LexicalEntry vt, Environment env)
 		{
 			/* Function Description: Given a veil template such as (Near x y) And (Grasping x z)
 			 * and the ground-truth sequence; (Near robot cup) And (Grasping robot mug); it returns
@@ -470,13 +470,13 @@ namespace ProjectCompton
 
 			#region apply_inference_steps
 			List<Tuple<double[],double>> derivations = new List<Tuple<double[],double>>();//pair of features and the weights
-			VerbProgram v = tester.veil.Find(veil_ => veil_.getName().Equals(cls.verb.getName(), StringComparison.OrdinalIgnoreCase));
-			List<VeilTemplate> vtList = null;
+			VerbProgram v = tester.lexicon.Find(veil_ => veil_.getName().Equals(cls.verb.getName(), StringComparison.OrdinalIgnoreCase));
+			List<LexicalEntry> vtList = null;
 			if(v == null)
-				vtList = new List<VeilTemplate>();
+				vtList = new List<LexicalEntry>();
 			else vtList = v.getProgram();
 
-			foreach (VeilTemplate vt in vtList)
+			foreach (LexicalEntry vt in vtList)
 			{
 				if(!(bool)param[0])
 					continue;
@@ -590,8 +590,8 @@ namespace ProjectCompton
 			}
 
 			List<double[]> weights = new List<double[]>();
-			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> parsedSentence = this.testObj.obj.returnAllData ();
-			List<List<Tuple<int, int>>> alignment = this.testObj.obj.returnAllAlignment ();
+			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> parsedSentence = this.testObj.prs.returnAllData ();
+			List<List<Tuple<int, int>>> alignment = this.testObj.prs.returnAllAlignment ();
 
 			for (int mth = 0; mth < this.testObj.methods.Count(); mth++) 
 			{

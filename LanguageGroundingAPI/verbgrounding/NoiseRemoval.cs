@@ -22,7 +22,7 @@ namespace ProjectCompton
                 {
                     StringBuilder entireFile = new StringBuilder();
                     StringBuilder addNew = new StringBuilder();
-                    XmlTextReader reader = new XmlTextReader(Constants.rootPath + "VEIL500/Environment/" + e + @"/" + e + i.ToString() + ".xml");
+                    XmlTextReader reader = new XmlTextReader(Constants.rootPath + Constants.dataFolder+"/Environment/" + e + @"/" + e + i.ToString() + ".xml");
 
                     while (reader.Read())
                     {
@@ -56,7 +56,7 @@ namespace ProjectCompton
 
                     reader.Close();
 
-                    System.IO.StreamWriter sw = new System.IO.StreamWriter(Constants.rootPath + "VEIL500/Environment/" + e + @"/" + e + i.ToString() + ".xml");
+                    System.IO.StreamWriter sw = new System.IO.StreamWriter(Constants.rootPath + Constants.dataFolder+"/Environment/" + e + @"/" + e + i.ToString() + ".xml");
                     sw.WriteLine("<environment>");
                     sw.WriteLine(entireFile.ToString());
                     sw.WriteLine(addNew.ToString());
@@ -285,8 +285,8 @@ namespace ProjectCompton
 				for (int j = 0; j < inst.Count()-2; j = j + 3)
 				{
 					if(inst[j].getControllerFunction().Equals("release") && inst[j+1].getControllerFunction().Equals("moveto")
-					   && inst[j+2].getControllerFunction().Equals("grasp") && inst[j].getDescription()[0].Equals(inst[j+1].getDescription()[0])
-					   && inst[j].getDescription()[0].Equals(inst[j+2].getDescription()[0]))
+					   && inst[j+2].getControllerFunction().Equals("grasp") && inst[j].getArguments()[0].Equals(inst[j+1].getArguments()[0])
+					   && inst[j].getArguments()[0].Equals(inst[j+2].getArguments()[0]))
 					{
 						removedInstructions.Add(j);
 						removedInstructions.Add(j+1);
@@ -393,7 +393,7 @@ namespace ProjectCompton
 						bool edgeCase = false;
 						if (inst.getControllerFunction ().Equals ("grasp")) 
 						{
-							String word = inst.getDescription () [0];
+							String word = inst.getArguments () [0];
 							if (constraint.Equals ("(Near Robot " + word + ")^(not (Grasping Robot " + word + "))")) 
 							{
 								edgeCase = true;
@@ -746,15 +746,15 @@ namespace ProjectCompton
 		public static void cleanData(Tester tester)
 		{
 			/* Function Description: Calls functions for cleaning the data */
-			NoiseRemoval.store (tester.obj, false);
-			NoiseRemoval.checkConsistency(tester.obj, tester.envList, tester);
-			NoiseRemoval.instSeqCleaning (tester.obj, tester.sml, tester.envList);
+			NoiseRemoval.store (tester.prs, false);
+			NoiseRemoval.checkConsistency(tester.prs, tester.envList, tester);
+			NoiseRemoval.instSeqCleaning (tester.prs, tester.sml, tester.envList);
 			NoiseRemoval.removeDeadObjects (tester.envList);
-			NoiseRemoval.removeTrivia(tester.obj);
-			NoiseRemoval.fixAlignment (tester.obj);
+			NoiseRemoval.removeTrivia(tester.prs);
+			NoiseRemoval.fixAlignment (tester.prs);
 			//NoiseRemoval.store (tester.obj, true);
 			//NoiseRemoval.simplifyInstructionSeq (tester.obj, tester.envList, tester.sml, tester.symp);
-			Console.WriteLine ("Done with Noise Removal Total Points :- "+tester.obj.returnAllData().Count());
+			Console.WriteLine ("Done with Noise Removal Total Points :- "+tester.prs.returnAllData().Count());
 		}
     }
 }

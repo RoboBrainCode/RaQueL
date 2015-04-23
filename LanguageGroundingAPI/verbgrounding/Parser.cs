@@ -77,7 +77,7 @@ namespace ProjectCompton
              * Get the next two values. */
             if (this.reader == null)
             {
-				reader = new XmlTextReader(Constants.rootPath + "parser_" + Constants.problemName);
+				reader = new XmlTextReader(Constants.rootPath + "parser_" + Constants.dataFileName);
                 reader.Read();
             }
 
@@ -118,7 +118,7 @@ namespace ProjectCompton
             /* Function Description : Stores the data in an xml file */
             if (this.writer == null)
             {
-				this.writer = new System.IO.StreamWriter (Constants.rootPath + "parser_" + Constants.problemName, true);
+				this.writer = new System.IO.StreamWriter (Constants.rootPath + "parser_" + Constants.dataFileName, true);
                 this.writer.WriteLine("<closure>");
             }
             this.writer.WriteLine("<data1>"+data.Item1+"</data1><data2>"+data.Item2+"</data2>");
@@ -167,7 +167,7 @@ namespace ProjectCompton
              *      ......
              * </root> */
 
-            XmlTextReader reader = new XmlTextReader(Constants.rootPath + Constants.veilFileName);
+			XmlTextReader reader = new XmlTextReader(Constants.rootPath + Constants.dataFolder+@"/"+Constants.dataFileName);
 			this.ublReader = new System.IO.StreamReader (Constants.UBLPath+"lambda.txt");
             String sentence = "", instruction = "";
             int scenarioID = -1, objectiveID = -1; //scenario ID defines environment like kitchen1, livingRoom12 etc. while objectiveID defines the objective like making ramen, clean room etc.
@@ -199,8 +199,10 @@ namespace ProjectCompton
                         }
                         if (reader.Name.Equals("instruction"))
                         {
-                            reader.Read();
-                            instruction = reader.Value;
+                            //reader.Read();
+							instruction = reader.ReadInnerXml ();//reader.Value;
+							if(!Constants.dataFolder.Equals("VEIL500"))
+								instructions = this.parseInstruction(instruction, individualClause, envList[scenarioID-1], lg);
                         }
                         if (reader.Name.Equals("scenario_id"))
                         {
@@ -221,7 +223,7 @@ namespace ProjectCompton
 					case XmlNodeType.EndElement: //Display the end of the element.
                         if (reader.Name.Equals("sentence"))
                         {
-                            wholeClause = this.parseSentence(sentence, individualClause, lg);
+                            wholeClause = this.shallowParsing(sentence, individualClause, lg);
                             sentence = null;
                         }
                         if (reader.Name.Equals("instruction"))
@@ -275,7 +277,7 @@ namespace ProjectCompton
 			 * this.reader.Close (); */
 			this.unlabelledData = new List<Tuple<Tuple<int, int>, Clause, List<Clause>>> ();
 
-			XmlTextReader reader = new XmlTextReader(Constants.rootPath +"VEIL500/unlabelled_" + Constants.problemName);
+			XmlTextReader reader = new XmlTextReader(Constants.rootPath +Constants.dataFolder+"/unlabelled_" + Constants.dataFileName);
 
 			String sentence = "";
 			int scenarioID = -1, objectiveID = -1; //scenario ID defines environment like kitchen1, livingRoom12 etc. while objectiveID defines the objective like making ramen, clean room etc.
@@ -312,7 +314,7 @@ namespace ProjectCompton
 					case XmlNodeType.EndElement: //Display the end of the element.
 					if (reader.Name.Equals("sentence"))
 					{
-						wholeClause = this.parseSentence(sentence, individualClause, lg);
+						wholeClause = this.shallowParsing(sentence, individualClause, lg);
 						sentence = null;
 					}
 					if (reader.Name.Equals("point"))
@@ -332,7 +334,7 @@ namespace ProjectCompton
 			this.close(); //Close the writer file which is being used for caching the data in a file
 		}
 
-        private Clause parseSentence(String sentence, List<Clause> individualClause, Logger lg)
+        private Clause shallowParsing(String sentence, List<Clause> individualClause, Logger lg)
         {
             /*Function Description: Parse the sentence or paragraph which has the format - 
               sentence : fragment1 | fragment2  ...... | fragmentk <br/><span ...> .....</span>
@@ -408,6 +410,46 @@ namespace ProjectCompton
             return sentenceRoot;
         }
 
+		public Clause shallowParsing(String text, Logger lg)
+		{
+			/* Function Description: Perform shallow parsing on this text and output clause */
+
+			List<Clause> sntcCLS = new List<Clause>();	
+			String[] decomposing = text.Split(new char[] { '.' });
+
+			foreach (String elem in decomposing)
+			{
+				if (elem.Count() == 0)
+					continue;
+
+				String lexParse = this.callLexParserOnString(elem).Item2;
+				if (lexParse.Length == 0) //To handle out of memory exception
+				{
+					lg.writeToErrFile("Sentence "+elem+" is either empty or too long");
+					continue;
+				}
+
+				List<String> filteredOutput = this.filterParse(lexParse);
+				Clause cls = this.generateCFL(filteredOutput[0]); //generate clause from the constituency parse tree
+
+				Clause iterator = cls;
+				for (int i=1; i<filteredOutput.Count(); i++) //altnerative clauses generated from topK parse tree are attached to each other
+				{
+					Clause altCls = this.generateCFL(filteredOutput[i]);
+					iterator.alternativeParse = altCls;
+					iterator = altCls;
+				}
+
+				if (cls != null) 
+				{
+					cls.sentence = elem; //this should be further segmented
+					sntcCLS.Add (cls);  //add cls to final
+				}
+			}
+
+			return this.connectCFL(sntcCLS);
+		}
+
 		private List<Instruction> parseInstruction(String instruction, List<Clause> individualClause, Environment env, Logger lg)
         {
             /* Function Description : Parses the instruction which have the following format-  
@@ -460,7 +502,7 @@ namespace ProjectCompton
 							String rel = "On";
 							if (env.objects [index].affordances_.Contains ("IsPlaceableIn"))
 								rel = "In";
-							replacedInst.parse ("keep " + instList.Last ().getDescription () [0] + " " + rel + " " + env.objects [index].uniqueName, lg);
+							replacedInst.parse ("keep " + instList.Last ().getArguments () [0] + " " + rel + " " + env.objects [index].uniqueName, lg);
 							instList.RemoveAt (instList.Count () - 1);
 							instList.Add (replacedInst);
 						} 
@@ -841,7 +883,7 @@ namespace ProjectCompton
 			//lg.writeToParserData ("<root>");
 			foreach (VerbProgram vp  in veil) 
 			{
-				foreach (VeilTemplate vtmp in vp.getProgram()) 
+				foreach (LexicalEntry vtmp in vp.getProgram()) 
 				{
 					lg.writeToParserData ("<veil>");
 					//store clause

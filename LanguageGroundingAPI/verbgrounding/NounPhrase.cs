@@ -1,8 +1,9 @@
-﻿ using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+
 /*Comments: Dipendra 
 * 1. why is main noun a list of syntactic tree and not just one syntactic tree 
 * 2. would you rather prefer a datastructure of the form [specifier-type, specifier]

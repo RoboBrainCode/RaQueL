@@ -1,13 +1,11 @@
-﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+﻿/* Tell Me Dave 2015 Version 3.Beta, Robot-Language Learning Project
  * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
+ * 					 - Kejia Tao (ktk454@cornell.edu)
  * working in Cornell Personal Robotics Lab.
- * 
- * More details - http://tellmedave.cs.cornell.edu
- * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
- */
+ * More details - http://tellmedave.cs.cornell.edu */
 
 /*  Notes for future Developers - 
- *    <no - note > */
+ *    <no-note > */
 
 using System;
 using System.Collections.Generic;
@@ -164,8 +162,8 @@ namespace ProjectCompton
 
 				foreach (VerbProgram vp in veil) 
 				{
-					List<VeilTemplate> vtmps = vp.getProgram ();
-					foreach (VeilTemplate vtmp in vtmps)
+					List<LexicalEntry> vtmps = vp.getProgram ();
+					foreach (LexicalEntry vtmp in vtmps)
 					{
 						this.buildPredicateFrequency (vtmp);
 						this.buildPredicateFrequencies(vtmp);
@@ -177,7 +175,7 @@ namespace ProjectCompton
 			//this.printFeatures ();
         }
 
-		public void singletonUpdate(VeilTemplate vtmp)
+		public void singletonUpdate(LexicalEntry vtmp)
 		{
 			/* Function Description: Given a new addition to VEIL templates, update the datastructures:
 			 * Presently Updating: PredicateFrequency, RelCorrelation
@@ -329,7 +327,7 @@ namespace ProjectCompton
                 foreach (Instruction inst in info.Item3)
                 {
                     String controllerFunction = inst.getControllerFunction();
-                    List<String> args = inst.getDescription();
+                    List<String> args = inst.getArguments();
                     for (int padding = 0; padding < args.Count(); padding++) //for every description of s
                     {
                         bool added = false;
@@ -383,7 +381,7 @@ namespace ProjectCompton
             double score = 0;
             for (int i = 0; i < inst.Count(); i++)
             {
-                List<String> description = inst[i].getDescription();
+                List<String> description = inst[i].getArguments();
                 for (int j = 0; j < description.Count(); j++)
                 {
                     score = score + this.getVerbCorrelation(inst[i].getControllerFunction(), description[j], j);
@@ -407,7 +405,7 @@ namespace ProjectCompton
             {
 				instPrior = instPrior + this.getInstructionPrior(inst);  //compute instruction prior
                 //compute verb-correlation prior
-                List<String> args = inst.getDescription();
+                List<String> args = inst.getArguments();
                 for (int i = 0; i < args.Count(); i++)
                 {
                     vcorrScore = vcorrScore + this.getVerbCorrelation(inst.getControllerFunction(), args[i], i);
@@ -428,7 +426,7 @@ namespace ProjectCompton
 			return weights["w_lip"] * instPrior + weights["w_lvcor"] * vcorrScore + weights["w_ldscp"] * descpL;
         }
 
-		public double getAccumulatedScore(VeilTemplate vtmp, Clause cls, Environment envTest, List<Instruction> instruction,
+		public double getAccumulatedScore(LexicalEntry vtmp, Clause cls, Environment envTest, List<Instruction> instruction,
 		                                  List<Tuple<Object, String, String, int>> tableOfStates, int[] mapping, Dictionary<String,double> weights)
         {
 
@@ -482,7 +480,7 @@ namespace ProjectCompton
             {
 				instPrior = instPrior + this.getInstructionPrior(inst); //compute instruction prior
                 //compute verb-correlation prior
-                List<String> args = inst.getDescription();
+                List<String> args = inst.getArguments();
                 for (int i = 0; i < args.Count(); i++)
                 {
                     vcorrScore = vcorrScore + this.getVerbCorrelation(inst.getControllerFunction(), args[i], i);
@@ -521,7 +519,7 @@ namespace ProjectCompton
 				   + weights["w_bog"] * bagOfWord; //every value is bounded by 0-1
         }
 
-        public double objectCorrelation(VeilTemplate vtmp, int[] mapping, Environment envTest)
+        public double objectCorrelation(LexicalEntry vtmp, int[] mapping, Environment envTest)
         {
             /* Function Description: EE correlation function. Given new mapping of variables, compute distance
              * between object that were used earlier and now */
@@ -676,7 +674,7 @@ namespace ProjectCompton
 			return score;
 		}*/
 
-		private void buildPredicateFrequency(VeilTemplate vtmp)
+		private void buildPredicateFrequency(LexicalEntry vtmp)
 		{
 			/* Function Description: Given the veil library. Build a 
 			 * table consisting of seen predicates along with their numbers.
@@ -708,7 +706,7 @@ namespace ProjectCompton
 				return 0;
 		}
 
-		public void buildPredicateFrequencies(VeilTemplate vtmp)
+		public void buildPredicateFrequencies(LexicalEntry vtmp)
 		{ 
 			/* Function Description: Builds predicate frequency table using groundings in veil template */
 
@@ -1144,7 +1142,7 @@ namespace ProjectCompton
 			#endregion
 		}
 
-		public void buildRelCorrelation(VeilTemplate vtmp)
+		public void buildRelCorrelation(LexicalEntry vtmp)
 		{
 			/* Function Description: Given training data, build correlation
 			 * between relationship and spatial relation. E.g., if the command is
@@ -1330,7 +1328,7 @@ namespace ProjectCompton
 					if(startIndex > endIndex)
 						continue;
 					Environment end = this.sml.executeList(datas[pt].Item3.GetRange(startIndex, endIndex-startIndex+1), start);
-					List<String> difference = Global.reformatStatePredicatesForGiza(VeilTemplate.takeOnlyPositivePredicates(end.difference(start)));
+					List<String> difference = Global.reformatStatePredicatesForGiza(LexicalEntry.takeOnlyPositivePredicates(end.difference(start)));
 					if(difference.Count() == 0)
 						continue;
 					start = end;

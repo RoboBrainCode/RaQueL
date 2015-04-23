@@ -7,6 +7,13 @@ using WordsMatching;
 
 namespace ProjectCompton
 {
+	public enum OpMode
+	{
+		Offline,	//offline inference and learning on a dataset using cross-validation
+		Online,	    //online inference and learning
+		Transfer    //inference on a new dataset with new actions and environment
+	}
+
 	public enum Solver
 	{
 		InteriorPoint,
@@ -21,40 +28,44 @@ namespace ProjectCompton
 
     class Constants
     {
-        /*Class Description : Describes various constants*/
+        /*Class Description : Describes various constants */
+
+		//Paths
 		internal static string rootPath = "/home/robo328b/dipendra_tellmedave/ProjectCompton/";//@"/home/dipendra/Research/ProjectCompton/";// @"/Users/Ella/Documents/research/ProjectCompton/";
 		internal static string UBLPath = @"/home/robo328b/dipendra_tellmedave/LambdaExpression/";//@"/home/dipendra/Research/verbgrounding/LambdaExpression/";//@"/Users/Ella/Documents/research/verbgrounding/LambdaExpression/";
-		internal static string problemName = "data_Feb-18-2015.xml"; //"data_Jan-12-2015.xml"; //Name of the data file. See ReadMe for details on format
-		internal static string veilFileName = @"VEIL500/" + Constants.problemName;//@"VEIL500/data_May-07-2014_1.xml";
-        internal static string cygwinPath = @"C:/cygwin64/bin/"; //@"/Users/Ella/Documents/research/ProjectCompton/"; //cygwin directory
-		internal static string ublPath = Constants.rootPath+"Baselines/UBL/UBL/experiments/new/data/en/run-0/fold-0/";
-		internal static string gizaPath = Constants.rootPath+"Baselines/UBL/giza-pp/GIZA++-v2/";
-        internal static int numScenarios = 2;
-		internal static String[] scenarios = new String[2] { "kitchen", "livingRoom" };
+		internal static string dataFileName = "data_JohnOberlin_dummy.xml";//"data_Feb-18-2015.xml"; //Name of the data file. See ReadMe for details on format
+		internal static string dataFolder = "VEIL3";
+        internal static string cygwinPath = @"C:/cygwin64/bin/"; //cygwin directory for running linux commnds on window
+		internal static string ublPath = Constants.rootPath + "Baselines/UBL/UBL/experiments/new/data/en/run-0/fold-0/";
+		internal static string gizaPath = Constants.rootPath + "Baselines/UBL/giza-pp/GIZA++-v2/";
+
+		//Data Description
+		internal static String[] scenarios = new String[1]{"TableWorld"};// new String[2] { "kitchen", "livingRoom" };
         internal static bool analyze = false;
-        internal static int numEnvironment = 10;
-        internal static int numDataPerEnvironment = 10;
+		internal static int numEnvironment = 1;//10;
+		internal static int numDataPerEnvironment = 3;//10;
 		internal static double wordnetDistThreshold = 0.85; 
 		internal static int topKParse = 1;
         internal static int version = 3;                 //Code version
-        internal static int loggingLevel = 1;            //[-1 : no log, 0 : only important information, 1: all information]
+        internal static int loggingLevel = 0;            //[-1 : no log, 0 : only important information, 1: all information]
         internal static bool usingLinux = true;          //Will use different files if OS is Linux if this flag is turned  on. By default the OS is Windows
         internal static double epsilon = 0.001;          //used to prevent dividing by 0 situation
 
 		//Algorithm Flags
+		internal static OpMode opmode = OpMode.Transfer;
 		internal static Solver method = Solver.InteriorPoint;
 		internal static CrossValidationScheme scheme = CrossValidationScheme.Environment;
 
         //Cache Flags
         internal static bool cacheReadQP = false;            //reads solution of QP program from xml file
 		internal static bool cacheWriteQP = false;           //writes solution of QP program into a file
-		internal static bool cacheReadParser = true;         //reads parse output from a parser xml file
-		internal static bool cacheReadUBLParser = true;      //reads UBL parse output from a parser file
+		internal static bool cacheReadParser = false;         //reads parse output from a parser xml file
+		internal static bool cacheReadUBLParser = false;      //reads UBL parse output from a parser file
 		internal static bool cacheReadWeights = false;        //reads weights from a learning file
-		internal static bool cacheBootStrapPlanOut = true;  //bootstraps the symbolic planner results from cache
-		internal static bool cacheBootStrapSentenceSim = true; //bootstrap sentence similarity
+		internal static bool cacheBootStrapPlanOut = false;  //bootstraps the symbolic planner results from cache
+		internal static bool cacheBootStrapSentenceSim = false;//true; //bootstrap sentence similarity
 
-		internal static bool allow= false;
+		internal static bool allow = false;
 		internal static bool disablelog = false;
 	}
 }

@@ -38,7 +38,7 @@ namespace ProjectCompton
         private double boundingX, boundingY, boundingZ;
         private string temperature = "LOW";
         private double alpha, beta, gamma;//pose
-        public string uniqueName="default";
+		public string uniqueName = "default";
 
         private List<String> affordances = new List<string>(); //List of all affordance of this object
         private List<Tuple<String, String>> state = new List<Tuple<String, String>>(); //an object can be in many states
@@ -100,7 +100,7 @@ namespace ProjectCompton
             this.uniqueName = Global.firstCharToUpper(uniqueName);
             String baseName = Global.base_(uniqueName);
 
-            XmlTextReader reader = new XmlTextReader(Constants.rootPath + "VEIL500/Objects.xml");
+            XmlTextReader reader = new XmlTextReader(Constants.rootPath + Constants.dataFolder+"/Objects.xml");
             bool objectFound = false;
             String stateName = "";
             while (reader.Read())

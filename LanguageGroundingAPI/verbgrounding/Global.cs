@@ -22,15 +22,11 @@ namespace ProjectCompton
     {
         /*Class Description : Contains a list of static functions*/
 
-        public static List<String> instructions = new List<string>() { "Find", "Walk", "Keep", "Grasp", "Release", "Pour", "Wait", "Turn", "Open", "Close", "Press", "ScoopTo", "ScoopFrom", "Squeeze" };
-        public static List<String> relations = new List<string>() { "Above", "On", "Inside", "Below" };
         public static List<String> conditionIf = new List<string>() { "if", "when" };
         public static List<String> conditionFor = new List<string>() { "for" };
         public static List<String> conditionUntil = new List<string>() { "until" };
         public static List<String> conditionElse = new List<string>() { "else", "otherwise" };
         public static List<String> conditionAfter = new List<string>() { "after" };
-
-		public static int num = 0;
 
         internal static string base_(String objName)
         {
@@ -57,47 +53,6 @@ namespace ProjectCompton
             return input.First().ToString().ToUpper() + String.Join("", input.Skip(1));
         }
 
-        internal bool caseIgnore(String u, String v)
-        {
-            /*Function Description : Does a case ignore comparison of two strings*/
-            return u.Equals(v, StringComparison.OrdinalIgnoreCase);
-        }
-
-        internal String returnMatched(List<Tuple<String, String>> ls, String key)
-        {
-            /*Function Description : Returns val such that (key,val) is in ls*/
-            foreach (Tuple<String, String> tmp in ls)
-            {
-                if (tmp.Item1.Equals(key, StringComparison.OrdinalIgnoreCase))
-                    return tmp.Item2;
-            }
-            return null;
-        }
-
-        internal static bool contains(List<int> c, int x)
-        {
-            /* Function Description : True if c contains x else False*/
-            foreach (int tmp in c)
-            {
-                if (tmp == x)
-                    return true;
-            }
-            return false;
-        }
-
-        internal static int frequency(String ls, char c)
-        {
-            /* Function Description : Computes how many time the letter c
-             * appears in the string ls*/
-            int freq = 0;
-            for (int i = 0; i < ls.Count(); i++)
-            {
-                if (ls[i] == c)
-                    freq++;
-            }
-            return freq;
-        }
-
         internal static string[] removeEmpty(String[] ar)
         {
             /* Function Description : Remove the empty lines*/
@@ -114,26 +69,6 @@ namespace ProjectCompton
             {
                 arNew[count] = ar[i];
                 count++;
-            }
-            notEmpty.Clear();
-            return arNew;
-        }
-
-        internal static List<String> removeEmpty_(List<String> ar)
-        {
-            /* Function Description : Remove the empty lines*/
-            int len = ar.Count();
-            List<int> notEmpty = new List<int>();
-            for (int i = 0; i < len; i++)
-            {
-                if (!Global.isEmpty(ar[i]))
-                    notEmpty.Add(i);
-            }
-
-            List<String> arNew = new List<String>();
-            foreach (int i in notEmpty)
-            {
-                arNew.Add(ar[i]);
             }
             notEmpty.Clear();
             return arNew;
@@ -188,44 +123,6 @@ namespace ProjectCompton
                 }
             }
             return true;
-        }
-
-        internal static List<String> union(List<String> ls, String newElem)
-        {
-            /* Function Description : Takes union of ls and newElem. 
-               using IgnoreCase comparison*/
-            foreach (String elem in ls)
-            {
-                if (elem.Equals(newElem, StringComparison.OrdinalIgnoreCase))
-                {
-                    return ls;
-                }
-            }
-            ls.Add(newElem);
-            return ls;
-        }
-
-        internal static List<String> intersection(List<String> xs, List<String> ys)
-        {
-            /* Function Description : Intersects the two string. Null means Everything or no restriction*/
-            if (ys == null)
-                return xs;
-            if (xs == null)
-                return ys;
-
-            List<String> result = new List<String>();
-            foreach (String x in xs)
-            {
-                bool added = false;
-                foreach (String y in ys)
-                {
-                    if (x.Equals(y, StringComparison.OrdinalIgnoreCase))
-                        added = true;
-                }
-                if (added)
-                    result.Add(x);
-            }
-            return result;
         }
 
         internal static String trimFirstWord(String str)

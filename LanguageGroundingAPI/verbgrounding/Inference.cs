@@ -93,61 +93,6 @@ namespace ProjectCompton
 				this.readQP.Close();
 			this.sensim.storeCache ();
         }
-		
-        public Tuple<Clause, List<Instruction>, Environment> trimItDown(Tuple<Clause, List<Instruction>, Environment> orig, int trim)
-        {
-            /* Function Description : Trim down the program from begining to depth of trim */
-            List<Instruction> newInst = new List<Instruction>();
-            for (int i = trim; i < orig.Item2.Count(); i++)
-                newInst.Add(orig.Item2[i]);
-
-            //Change the environment as well
-            Environment iterator = orig.Item3.makeCopy();
-            for (int i = 0; i < trim; i++)
-            {
-                Instruction inst = orig.Item2[i];
-                inst = inst.makeCopyAndRevert();
-                iterator = this.sml.execute(inst, iterator);
-            }
-
-            //copy the clause
-            Clause cls = new Clause();
-            cls = orig.Item1.makeCopy();
-
-            return new Tuple<Clause, List<Instruction>, Environment>(cls, newInst, iterator);
-        }
-
-        public VeilTemplate trimItDown(VeilTemplate orig, int trim)
-        {
-            /* Function Description : Trim down the program from begining to depth of trim */
-            List<Instruction> newInst = new List<Instruction>();
-            for (int i = trim; i < orig.instOld.Count(); i++)
-            {
-                Instruction nw = orig.instOld[i].makeCopy();
-                newInst.Add(nw);
-            }
-
-            foreach (Instruction itmp in newInst)
-            {
-                foreach (String dscp in itmp.getDescription())
-                {
-                    if (dscp[0] == '$')
-                        throw new ApplicationException("Generalized Variables Exist");
-                }
-            }
-
-            //Change the environment as well
-			Environment iterator = orig.env_.makeCopy();
-            for (int i = 0; i < trim; i++)
-            {
-                Instruction inst = orig.instOld[i];
-                iterator = this.sml.execute(inst, iterator);
-            }
-
-            Clause cls = orig.cls_.makeCopy(); //copy the clause
-            VeilTemplate trimmedDown = new VeilTemplate(cls, newInst, iterator, -1, this.sml);
-            return trimmedDown;
-        }
 
 		public String expansion(List<List<String>> samePlurality, String cstr)
 		{
@@ -194,7 +139,7 @@ namespace ProjectCompton
 			return String.Join ("^", newConstraints);
 		}
 		
-        public List<Instruction> instantiation(VeilTemplate eq, int[] mapping, Environment envTest)
+        public List<Instruction> instantiation(LexicalEntry eq, int[] mapping, Environment envTest)
         {
             /* Function Description: Apply the mapping on the template and return
              * the instantiated instruction sequence */
@@ -206,7 +151,7 @@ namespace ProjectCompton
 
 		    foreach (Instruction inst in insts)
             {
-                List<String> description = inst.getDescription();
+                List<String> description = inst.getArguments();
                 List<String> newDescription = new List<String>();
 
                 foreach (String dscp in description)
@@ -231,23 +176,28 @@ namespace ProjectCompton
             return instant;
         }
 
-		public List<String> instantiatePredicates(VeilTemplate vt, int[] mapping, Environment envTest)
+		public List<String> instantiatePredicates(LexicalEntry vt, int[] mapping, Environment envTest)
 		{
 			/* Function Description: Takes a set of predicates [predicate] and mapping of the parameters to envTest
 			 * and returns the instantiated predicates */
 			List<String> instantiated = new List<String> ();
 			List<Object> objList = envTest.objects;
 			List<String> variables = vt.zVariablePredicatePost;
+			Console.WriteLine ("VArrrr "+String.Join(", ",variables));
 			foreach (String predicate in vt.predicatesPost) 
 			{
 				Tuple<bool,string> predicate_ = Global.getAtomic(predicate);
 				String[] words = predicate_.Item2.Split (new char[]{' '});
 				for(int i=0; i<words.Length;i++)
 				{
+					Console.WriteLine("Word is "+words[i]);
 					for (int v = 0; v < variables.Count(); v++)
 					{
-						if (words[i].Equals(variables[v]))
-							words[i] = objList[mapping[v]].uniqueName;
+						if (words [i].Equals (variables [v])) 
+						{
+							Console.WriteLine ("Matched and mapped using "+objList [mapping [v]].uniqueName);
+							words [i] = objList [mapping [v]].uniqueName;
+						}
 					}
 				}
 				String instantiatedPred = "("+string.Join (" ", words)+")";
@@ -282,7 +232,7 @@ namespace ProjectCompton
             throw new ApplicationException("Asking from Cache where None exists");
         }
 
-        public List<Tuple<Object, String, String, int>> createTableOfStates(Clause cl, Environment env, List<VeilTemplate> programs)
+        public List<Tuple<Object, String, String, int>> createTableOfStates(Clause cl, Environment env, List<LexicalEntry> programs)
         {
             /* Function Description : Given a clause cl and list of program instances, 
              * corresponding to some verb. This function returns a table of the form 
@@ -369,10 +319,10 @@ namespace ProjectCompton
 				{
 					if (objName1.Equals (objName2) || !env.findObject (objName1).affordances_.Contains ("IsGraspable"))
 						continue;
-					if (this.ftr.getBaseFormPredicateFreq("(On "+objName1+" " + objName2 + ")") > 0 &&
+					if ((!Constants.dataFolder.Equals("VEIL500") || this.ftr.getBaseFormPredicateFreq("(On "+objName1+" " + objName2 + ")") > 0 )&&
 						env.isSastified ("On " + objName1 + " " + objName2) == 0)
 						predicates.Add (new string[3] { "On", objName1, objName2 });
-					if (this.ftr.getBaseFormPredicateFreq("(In "+objName1+" " + objName2 + ")") > 0 && 
+					if ((!Constants.dataFolder.Equals("VEIL500") || this.ftr.getBaseFormPredicateFreq("(In "+objName1+" " + objName2 + ")") > 0) && 
 						env.isSastified ("In " + objName1 + " " + objName2) == 0)
 						predicates.Add (new string[3] { "In", objName1, objName2 });
 				}
@@ -382,7 +332,7 @@ namespace ProjectCompton
 			{
 				if (!env.findObject (objName1).affordances_.Contains ("IsGraspable"))
 					continue;
-				if (this.ftr.getBaseFormPredicateFreq ("(Grasping Robot " + objName1 + ")") > 0 &&
+				if ((!Constants.dataFolder.Equals("VEIL500") || this.ftr.getBaseFormPredicateFreq ("(Grasping Robot " + objName1 + ")") > 0)&&
 					env.isSastified ("Grasping Robot " + objName1) == 0)
 					predicates.Add (new string[3] { "Grasping", "Robot", objName1 });
 			}
@@ -397,6 +347,8 @@ namespace ProjectCompton
 
 			List<double> scores = new List<double> ();
 			List<String> objects = grounded; //new List<String> ();
+			Console.WriteLine ("String is "+String.Join(",",objects));
+
 			for (int k=insts.Count()-2; k>=0; k--) //the last one is $ marked
 			{
 				if (insts [k].getControllerFunction ().StartsWith ("$"))
@@ -414,8 +366,13 @@ namespace ProjectCompton
 				objects.Add ("StoveKnob_3"); objects.Add ("StoveKnob_4");
 			}
 
+			Console.WriteLine ("Checkpoint 2 reached");
+
 			List<String> names = cls.lngObj.Select (x => x.getName ()).ToList();
 			List<String[]> predicates = initPredicate (env, objects);
+
+			if (predicates.Count () == 0)
+				return new String[0];
 
 			for (int i=0; i<predicates.Count(); i++) 
 			{
@@ -454,6 +411,7 @@ namespace ProjectCompton
 				scores.Add(score);
 			}
 
+			Console.WriteLine ("Checkpoint 3 reached with #predicates "+predicates.Count());
 			//sort the predicate based on score
 			for (int i=0; i<predicates.Count(); i++) 
 			{
@@ -471,6 +429,7 @@ namespace ProjectCompton
 				scores [i] = swapsc;
 			}
 
+			Console.WriteLine ("Checkpoint 4 reached");
 			for (int k=0; k<objects.Count(); k++)
 				this.lg.writeToFile (objects[k]+", ");
 			this.lg.writeToFile ("<br/><span style='color:orange'>Top Rank Predicates: "); //pick those with maximum score
@@ -664,7 +623,7 @@ namespace ProjectCompton
              * Forward-Backward on reduced environment  -  O(k|ER||T|) */
 
 
-            Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> testData = tester.obj.getDataInformation(test);
+            Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> testData = tester.prs.getDataInformation(test);
             List<Clause> cls = testData.Item2.returnEventClause();
 
             if (topN == -1)
@@ -702,11 +661,11 @@ namespace ProjectCompton
                 foreach (Tuple<Environment, List<Instruction>, double> history in alpha[i]) //now E = env
                 {
                     Environment env = history.Item1;
-					VerbProgram v = tester.veil.Find (x=>x.getName().Equals(verbName, StringComparison.OrdinalIgnoreCase));
+					VerbProgram v = tester.lexicon.Find (x=>x.getName().Equals(verbName, StringComparison.OrdinalIgnoreCase));
                     
 	                if (v!=null) //verb exists
 	                {
-	                    List<VeilTemplate> programs = v.getProgram();
+	                    List<LexicalEntry> programs = v.getProgram();
 	                    List<Tuple<Object, String, String, int>> tableOfStates = null; //used by accumulated score
 						double[,] leCorrMatrix = env.getLECorrMatrix (cls [i], history.Item2, this.sensim, this.ftr);
 
@@ -724,7 +683,7 @@ namespace ProjectCompton
 	                        for (int trim = 0; trim <= 0/*programs[t].inst_.Count()*/; trim++) // Step :  Trimming
 	                        {
 	                            double score_interpolate = 0, score_core = 0, trim_score = weights["w_trim"] * trim * trim;
-								VeilTemplate vtmp = programs [t];//this.trimItDown(programs[t], trim);
+								LexicalEntry vtmp = programs [t];//this.trimItDown(programs[t], trim);
 
 	                            //Step: Find the interpolation
 	                            int[] mapping = map.mappingMisra2014(vtmp, cls[i], env, leCorrMatrix, this.lg);
@@ -1108,7 +1067,7 @@ namespace ProjectCompton
 
 			Environment envTest = history.Item1;
 			List<Tuple<String,Double>> predScoreTable = new List<Tuple<string, double>> ();
-			VerbProgram v = tester.veil.Find(veil_ => veil_.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase));
+			VerbProgram v = tester.lexicon.Find(veil_ => veil_.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase));
 
 			String[] sampleSpace = this.generateRelevantSpace (iterator, history.Item1, history.Item2, grounded, leTestCorrMatrix, plurality);
 			List<String> queue = new List<String>();
@@ -1383,14 +1342,14 @@ namespace ProjectCompton
 
 			List<Tuple<String,double>> predScoreTable = new List<Tuple<String,double>>();
 
-			VerbProgram v = tester.veil.Find(veil_ => veil_.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase));
-			List<VeilTemplate> vtList = null;
+			VerbProgram v = tester.lexicon.Find(veil_ => veil_.getName().Equals(iterator.verb.getName(), StringComparison.OrdinalIgnoreCase));
+			List<LexicalEntry> vtList = null;
 			if(v == null)
-				vtList = new List<VeilTemplate>();
+				vtList = new List<LexicalEntry>();
 			else vtList = v.getProgram();
 
 			int count = 0;
-			foreach (VeilTemplate vt in vtList)
+			foreach (LexicalEntry vt in vtList)
 			{
 				if(!(bool)param[0])
 					continue;
@@ -1403,7 +1362,13 @@ namespace ProjectCompton
 					continue;
 				}
 
+				Console.WriteLine("Mapping "+String.Join(",",mappingResult.Item1));
+				String stas = "";
+				for(int j=0; j<mappingResult.Item1.Count();j++)
+					stas = stas + "; " +envTest.objects[mappingResult.Item1[j]].uniqueName;
+				Console.WriteLine(stas);
 				String iterConstraints = String.Join("^",this.instantiatePredicates(vt, mappingResult.Item1, envTest).Distinct().ToList());
+				tester.lg.writeToFile("Constraints "+iterConstraints+"<br/>");
 
 				if(iterConstraints.Length==0)
 				{
@@ -1418,14 +1383,20 @@ namespace ProjectCompton
 
 				String cstrlog = "";
 				String preNoiseConstraint = constraint_.ToString();
-				String constraint = this.removeNoise(constraint_, referencedObjects, history.Item2, history.Item1);
+				String constraint = constraint_;
+				if(Constants.dataFolder.Equals("VEIL500"))
+					constraint = this.removeNoise(constraint_, referencedObjects, history.Item2, history.Item1);
+
 				if(constraint.Length == 0)
 					continue;
 
 				if(!preNoiseConstraint.Equals(constraint))
 					cstrlog= "Pre Noise Constraint was "+preNoiseConstraint;
 
-				String cstr = this.expansion(referencedObjects, constraint);
+				String cstr = constraint;
+				if(Constants.dataFolder.Equals("VEIL500"))
+					cstr = this.expansion(referencedObjects, constraint);
+
 				String[] cstrSplit = cstr.Split(new char[]{'^'});
 
 				/* Feature computation stage
@@ -1443,6 +1414,9 @@ namespace ProjectCompton
 				dscpCost= weights["w_dscp"] * cstrSplit.Length;
 				String sensSimLog = "";
 
+				Console.WriteLine("Entering 1 "+iterConstraints+" original postc "+
+				                  String.Join("^",vt.predicatesPost) + " variables "+vt.zVariablePredicatePost.Count());
+
 				if(vt.cls_.sentence!=null && iterator.sentence!=null)
 				{
 					List<String> trainWords = vt.cls_.getWords();//sentence.Split(new char[]{' '}).Select(x=>x.Trim()).ToList();
@@ -1455,6 +1429,7 @@ namespace ProjectCompton
 				}
 				else sentenceSim = 0;
 
+				Console.WriteLine("Entering 2");
 				List<String> objectCover = Global.getObjects(cstr, history.Item1);
 				int numObjects = 0;
 				for(int lang=0; lang < leTestCorrMatrix.GetLength(0); lang++)//if each object that was referred is being used
@@ -1487,6 +1462,7 @@ namespace ProjectCompton
 				}
 				leRecall = weights["w_lerecall"]*leRecall/Math.Max(numObjects, Constants.epsilon);
 
+				Console.WriteLine("Entering 3");
 				predSkeletalPrior = weights["w_prior"]*cstrSplit.Aggregate(0.0,(sum,cstr_) => sum + v.fetchFrequency(cstr_))/(cstrSplit.Length*v.totalFrequency() + Constants.epsilon);
 				predTotalPrior = weights["w_argprior"]*cstrSplit.Aggregate(0.0,(sum,cstr_) => sum + this.ftr.getPredicateFreq(cstr_))/(cstrSplit.Length*this.ftr.zPredFreq + Constants.epsilon);
 
@@ -1503,6 +1479,7 @@ namespace ProjectCompton
 
 				double totalScore = history.Item3*Math.Exp(exponent);//Math.Round(history.Item3*Math.Exp(exponent),2);
 
+				Console.WriteLine("Entering 4");
 				tester.lg.setLowPriority();
 				tester.lg.writeToFile("Template Count ["+count+"]<ul>"+
 				                      "<li><b>Constraint:</b>"+cstr+" <br/>["+ cstrlog +"] </li>"+
@@ -1565,6 +1542,12 @@ namespace ProjectCompton
 
 			#region find_top_k_valid_instruction_assignment_with_maximum_factor_score
 			int which = 0, added = 0;
+
+			tester.lg.writeToFile("<br/>------------------<br/>");
+			foreach (Tuple<String, double> discoveredPred in predScoreTable) 
+				tester.lg.writeToFile(discoveredPred.Item1+" at score "+discoveredPred.Item2);
+			tester.lg.writeToFile("<br/>------------------<br/>");
+
 			foreach (Tuple<String, double> discoveredPred in predScoreTable) 
 			{
 				which++;
@@ -1572,7 +1555,7 @@ namespace ProjectCompton
 				tester.lg.writeToFile("<br/>Picking "+orderedConstraint+" at score = "+discoveredPred.Item2+"<br/>");
 				List<Instruction> instruction = null;
 				if(which>50)
-					instruction = new List<Instruction>(); //---optimization choice : Note that this an optimization choice
+					instruction = new List<Instruction>(); //---optimization choice: Note that this an optimization choice
 				else instruction = tester.symp.satisfyConstraints (envTest, orderedConstraint);
 
 				if (instruction == null) 
@@ -1590,11 +1573,10 @@ namespace ProjectCompton
 				{
 					#region generate_new_veil_template_with_this_predicates
 					Environment copiedEnv = history.Item1.makeCopy();
-					VeilTemplate generatedTemplate = new VeilTemplate(discoveredPred.Item1.Split(new char[]{'^'}).ToList(), iterator, copiedEnv, -1, this.sml);//new VeilTemplate(iterator, copiedInst, copiedEnv, -1, this.sml);
+					LexicalEntry generatedTemplate = new LexicalEntry(discoveredPred.Item1.Split(new char[]{'^'}).ToList(), iterator, copiedEnv, -1, this.sml);//new VeilTemplate(iterator, copiedInst, copiedEnv, -1, this.sml);
 					this.lg.writeToFile("Generating template for the verb " +iterator.verb.getName()+" with predicates " +discoveredPred.Item1 );
 					tester.addVEILTemplate(generatedTemplate);
 					tester.inf.ftr.singletonUpdate(generatedTemplate);
-					Global.num++;
 					#endregion
 				}
 
@@ -1721,10 +1703,10 @@ namespace ProjectCompton
 			for (int i=0; i< instruction.Count(); i++) 
 			{
 				int index = -1;
-				while (instruction [i].getDescription ().FindIndex(x => reserveGraspCommand.Contains (x)) != -1) 
+				while (instruction [i].getArguments ().FindIndex(x => reserveGraspCommand.Contains (x)) != -1) 
 				{
-					index = instruction [i].getDescription ().FindIndex (x => reserveGraspCommand.Contains (x));
-					String objName_ = instruction [i].getDescription () [index];
+					index = instruction [i].getArguments ().FindIndex (x => reserveGraspCommand.Contains (x));
+					String objName_ = instruction [i].getArguments () [index];
 					Instruction moveto = new Instruction ("moveto", new List<String>(){objName_});
 					Instruction grasp = new Instruction ("grasp", new List<String>(){objName_});
 					valid.Add (moveto);
@@ -1736,13 +1718,13 @@ namespace ProjectCompton
 
 				if (instruction [i].getControllerFunction ().Equals ("grasp")) 
 				{
-					graspedThis = instruction [i].getDescription () [0];
+					graspedThis = instruction [i].getArguments () [0];
 					graspedObject.Add (graspedThis);
 				}
 				else if (instruction [i].getControllerFunction ().Equals ("release") ||
 					(instruction [i].getControllerFunction ().Equals ("keep")) ||
 					(instruction [i].getControllerFunction ().Equals ("insert")))
-					graspedObject.RemoveAll(x => x.Equals (instruction [i].getDescription () [0]));
+					graspedObject.RemoveAll(x => x.Equals (instruction [i].getArguments () [0]));
 
 				if (graspedObject.Count () > 2) //an object was grasped at this step i; when already 2 objects were being grasped
 				{
@@ -1755,7 +1737,7 @@ namespace ProjectCompton
 					bool appearsLater = false;
 					for (int j=i+1; j<instruction.Count(); j++) 
 					{
-						if (instruction [j].getDescription ().Contains (graspedThis)) 
+						if (instruction [j].getArguments ().Contains (graspedThis)) 
 						{
 							appearsLater = true;
 							reserveGraspCommand.Add (graspedThis);
@@ -1766,7 +1748,7 @@ namespace ProjectCompton
 					if (appearsLater) 
 					{
 						valid.RemoveAt (valid.Count () - 1);
-						if (valid.Last ().getControllerFunction ().Equals ("moveto") && valid.Last ().getDescription () [0].Equals (graspedThis))
+						if (valid.Last ().getControllerFunction ().Equals ("moveto") && valid.Last ().getArguments () [0].Equals (graspedThis))
 							valid.RemoveAt (valid.Count () - 1);
 						graspedObject.Remove (graspedThis);
 					}
@@ -1809,11 +1791,11 @@ namespace ProjectCompton
 			{
 				//check if this instruction has anything to do with any reserve command. If yes then grasp the object.
 				int index = -1;
-				while (instruction [i].getDescription ().FindIndex(x => reserveGraspCommand.Contains (x)) != -1) 
+				while (instruction [i].getArguments ().FindIndex(x => reserveGraspCommand.Contains (x)) != -1) 
 				{
-					index = instruction [i].getDescription ().FindIndex (x => reserveGraspCommand.Contains (x));
+					index = instruction [i].getArguments ().FindIndex (x => reserveGraspCommand.Contains (x));
 					Console.WriteLine ("index "+index);
-					String objName_ = instruction [i].getDescription () [index];
+					String objName_ = instruction [i].getArguments () [index];
 					Instruction moveto = new Instruction ("moveto", new List<String>(){objName_});
 					Instruction grasp = new Instruction ("grasp", new List<String>(){objName_});
 					valid.Add (moveto);
@@ -1825,20 +1807,20 @@ namespace ProjectCompton
 
 				if (instruction [i].getControllerFunction ().Equals ("grasp")) 
 				{
-					graspedThis = instruction [i].getDescription () [0];
+					graspedThis = instruction [i].getArguments () [0];
 					graspedObject.Add (graspedThis);
 				}
 				else if (instruction [i].getControllerFunction ().Equals ("release") ||
 				         (instruction [i].getControllerFunction ().Equals ("keep")) ||
 				         (instruction [i].getControllerFunction ().Equals ("insert")))
-					graspedObject.RemoveAll(x => x.Equals (instruction [i].getDescription () [0]));
+					graspedObject.RemoveAll(x => x.Equals (instruction [i].getArguments () [0]));
 
 				if (graspedObject.Count () > 2) //an object was grasped at this step i; when already 2 objects were being grasped
 				{
 					if (i == instruction.Count () - 1)
 						break;
 					//check if grasped object is being immediately referred
-					if (instruction [i + 1].getDescription ().Exists(x => x.Equals (graspedThis))) 
+					if (instruction [i + 1].getArguments ().Exists(x => x.Equals (graspedThis))) 
 					{
 						//keep down a grasped object; and put it in reserve
 						//picking the first object for now, but should use the strategy mentioned in comment
@@ -1851,10 +1833,10 @@ namespace ProjectCompton
 
 						for (int j=valid.Count()-1; j>=0; j--) //remove the last grasped command (and daggling moveto) that grasped the released object
 						{
-							if (valid [j].getDescription ().Contains (releasedObject) && valid [j].getControllerFunction ().Equals ("grasp")) 
+							if (valid [j].getArguments ().Contains (releasedObject) && valid [j].getControllerFunction ().Equals ("grasp")) 
 							{
 								wasgrasp = j;
-								if (j - 1 >= 0 && valid [j - 1].getControllerFunction ().Equals ("moveto") && valid [j - 1].getDescription () [0].Equals (releasedObject))
+								if (j - 1 >= 0 && valid [j - 1].getControllerFunction ().Equals ("moveto") && valid [j - 1].getArguments () [0].Equals (releasedObject))
 									dagglingmoveto = true;
 								break;
 							}
@@ -1897,7 +1879,7 @@ namespace ProjectCompton
 						//keep this object in reserve and remove instructions
 						reserveGraspCommand.Add (graspedThis);
 						valid.RemoveAt (valid.Count()-1); //remove grasp command
-						if (valid.Last ().getControllerFunction ().Equals ("moveto") && valid.Last ().getDescription ()[0].Equals(graspedThis))
+						if (valid.Last ().getControllerFunction ().Equals ("moveto") && valid.Last ().getArguments ()[0].Equals(graspedThis))
 							valid.RemoveAt (valid.Count()-1); //removing any daggling moveto command
 						graspedObject.Remove (graspedThis);
 					}

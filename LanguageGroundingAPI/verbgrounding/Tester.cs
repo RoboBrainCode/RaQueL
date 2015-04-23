@@ -1,10 +1,9 @@
-﻿/* Tell Me Dave 2013-14, Robot-Language Learning Project
+﻿/* Tell Me Dave 2013-15, Robot-Language Learning Project
  * Code developed by - Dipendra Misra (dkm@cs.cornell.edu)
  * working in Cornell Personal Robotics Lab.
  * 
- * More details - http://tellmedave.cs.cornell.edu
- * This is Version 2.0 - it supports data version 1.1, 1.2, 1.3
- */
+ * More details - http://tellmedave.com
+ * This is Version 3.0 Beta Released: April, 2015 */
 
 /*  Notes for future Developers - 
  *    <no - note >
@@ -21,15 +20,12 @@ namespace ProjectCompton
 {
     class Tester
     {
-        /*Class Description : Is the main class which provides functionalities for testing and running the algorithm.
+        /* Class Description : Is the main class which provides functionalities for testing and running the algorithm.
          * At this point the inference is also part of this class but there are plans to move it to a separate class.
          * This class also provides baseline algorithms.*/
 
-		public List<VerbProgram> veil{get; private set;}            //contains a list of training VEIL
+		public List<VerbProgram> lexicon{get; private set;}            //lexicon
 		public List<Environment> envList{get; private set;}
-
-		//public List<String> methodName{get; private set;}
-		//public List<Boolean> methodFlag{get; private set;}
 		public Dictionary<String,Boolean> methods{ get; private set;}
 
 		public List<List<Environment>> listOfAllEnv{get; private set;}
@@ -39,7 +35,7 @@ namespace ProjectCompton
         private Features ftr = null;                   //Feature object
         private Random rnd = null;                     //Random Number Generator to be used the entire program
         public Simulator sml = null;                   //Simulator Object
-        public Parser obj = null;                      //Parser Object
+        public Parser prs = null;                      //Parser Object
         public SymbolicPlanner symp = null;            //Symbolic Planner Object
         public DataAnalysis datany = null;             //Data Analysis Object
         public Metrics mtr = null;                     //Metric Object 
@@ -57,15 +53,15 @@ namespace ProjectCompton
 			this.envList =  new List<Environment>();
 			this.listOfAllEnv = new List<List<Environment>> ();
             this.sml = new Simulator(); //simulator
-            this.obj = new Parser(); //parser
+            this.prs = new Parser(); //parser
             this.mtr = new Metrics(this); //metric
             this.lg = new Logger(); //logger
             this.symp = new SymbolicPlanner(this.lg); //symbolic planner
-            this.datany = new DataAnalysis(this.obj, this.envList, this.lg); //Data Analysis Object
-			this.veil = new List<VerbProgram>(); //veil library
+            this.datany = new DataAnalysis(this.prs, this.envList, this.lg); //Data Analysis Object
+			this.lexicon = new List<VerbProgram>(); //veil library
             this.rnd = new Random();//random number generator
-            this.ftr = new Features(this.lg, this.obj, this.sml);
-            this.inf = new Inference(this.lg, this.sml, this.symp, this.veil, this.envList, this.obj, this.ftr);
+            this.ftr = new Features(this.lg, this.prs, this.sml);
+            this.inf = new Inference(this.lg, this.sml, this.symp, this.lexicon, this.envList, this.prs, this.ftr);
 			this.lrn = new Learning(this);
 
 			this.methods = new Dictionary<string, bool> ();
@@ -84,7 +80,7 @@ namespace ProjectCompton
         public void destroyer()
         {
             // Function Description: Destroys the data-structures
-            this.veil.Clear();
+            this.lexicon.Clear();
             this.ftr.destroyer();
         }
 
@@ -114,10 +110,10 @@ namespace ProjectCompton
         {
             /*Function Description : Displays the verbProgram datastructre*/
             String listOfVerbs = "";
-            foreach (VerbProgram v in this.veil)
+            foreach (VerbProgram v in this.lexicon)
                 listOfVerbs = listOfVerbs + ", " + v.getName();
             lg.writeToFile("<h3>The Learned Verb Model</h3><br/>Learned Unique Names : " + listOfVerbs);
-            foreach (VerbProgram v in this.veil)
+            foreach (VerbProgram v in this.lexicon)
                 v.display(this.lg);
         }
 
@@ -127,7 +123,7 @@ namespace ProjectCompton
 			 * of cross validation- test has unseen environments and test has unseen tasks. */
 
             List<Tuple<List<int>, List<int>>> datas = new List<Tuple<List<int>, List<int>>>();
-			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> allData = this.obj.returnAllData ();
+			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> allData = this.prs.returnAllData ();
 
 			/* For this, the algorithm needs to separate the dataset into [train,test] pair such that no
              * environment(task) from one exists in the other. In VEIL-1000 dataset which this version uses, there
@@ -183,8 +179,8 @@ namespace ProjectCompton
         {
             /* Function Description: Given training data, it constructs
              * the data structure and features */
-            this.bootstrapVEILTemplate(train);                      // build VEIL dataset
-			this.ftr.constructFeatureDataStructures (train, this.methods.Values.ToList(), this.veil,
+            this.induceLexiconFromTraining(train);                      // build VEIL dataset
+			this.ftr.constructFeatureDataStructures (train, this.methods.Values.ToList(), this.lexicon,
 			                                         this.envList, this.listOfAllEnv, this.inf.sensim);
 
             if (this.methods.ElementAt(0).Value)
@@ -211,17 +207,17 @@ namespace ProjectCompton
             Environment envCopy = env.makeCopy();
 
             //Create the template
-            VeilTemplate vtmp = new VeilTemplate(clsCopy, instructionSequence, envCopy, entry, this.sml);
+            LexicalEntry vtmp = new LexicalEntry(clsCopy, instructionSequence, envCopy, entry, this.sml);
 			vtmp.leCorrMatrix = vtmp.env_.getLECorrMatrix (vtmp.cls_,insts.GetRange(0,start),this.inf.sensim, this.ftr);
 			this.addVEILTemplate (vtmp);
         }
 
-		public void addVEILTemplate(VeilTemplate vtmp)
+		public void addVEILTemplate(LexicalEntry vtmp)
 		{
 			/* Function Description: add the veil template to the list of program */
 			String verbName = vtmp.cls_.verb.getName ();
 			bool added = false;
-			foreach (VerbProgram vprog in this.veil)
+			foreach (VerbProgram vprog in this.lexicon)
 			{
 				if (vprog.getName().Equals(verbName, StringComparison.OrdinalIgnoreCase)) //add to the exisiting condition
 				{
@@ -235,7 +231,7 @@ namespace ProjectCompton
 				//create a new entry
 				VerbProgram vprog = new VerbProgram(verbName);
 				vprog.add(vtmp);
-				this.veil.Add(vprog); //add the verb program
+				this.lexicon.Add(vprog); //add the verb program
 			}
 		}
 
@@ -265,7 +261,7 @@ namespace ProjectCompton
 		public void loadIntermediateEnv()
 		{
 			//Function Description: Load intermediate environment
-			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> datas = this.obj.returnAllData();
+			List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> datas = this.prs.returnAllData();
 			for(int i=0; i<datas.Count(); i++)
 			{
 				/* We need to find different Environment at different level of instruction
@@ -292,15 +288,17 @@ namespace ProjectCompton
 			}
 		}
 
-        public void bootstrapVEILTemplate(List<int> train)
+        public void induceLexiconFromTraining(List<int> train)
         {
             /* Function Description : Creates VEIL datastructure from the training dataset */
 
-            List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> data = this.obj.returnAllData();
-            List<List<Tuple<int, int>>> alignments = this.obj.returnAllAlignment();
+            List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> data = this.prs.returnAllData();
+            List<List<Tuple<int, int>>> alignments = this.prs.returnAllAlignment();
+			Console.WriteLine ("Data "+data.Count()+" and alignment "+alignments.Count());
 
             foreach (int index in train)
 			{
+				Console.WriteLine ("Working on point " + index);
                 Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>> info = data[index];
                 int numClause = info.Item4.Count();
 
@@ -333,7 +331,7 @@ namespace ProjectCompton
 			/* Function Description: The algorithm benefits from unsupervised data and we use this data to 
 			 * to pump in new templates. */
 
-			List<Tuple<Tuple<int, int>, Clause, List<Clause>>> unlabelledData = this.obj.unlabelledData;
+			List<Tuple<Tuple<int, int>, Clause, List<Clause>>> unlabelledData = this.prs.unlabelledData;
 
 			for (int i = 0; i < unlabelledData.Count(); i++)
 			{
@@ -364,12 +362,176 @@ namespace ProjectCompton
 			}
 		}
 
+		public List<Instruction> onlineInference(String text, int envIndex,List<object> param)
+		{
+			/* Function Description: Given a text and environment index. Algorithm parses and finds
+			 * optimal instruction sequence.*/
+
+			Clause cls =  this.prs.shallowParsing(text, lg); //shallow parse the text into clause
+			List<object> param9 = new List<object> () { (object)true, (object)true, (object)true };
+			List<Instruction> inferred = inf.acl2015 (cls, this.envList [envIndex - 1], this, (Dictionary<String, Double>)(param [9]), param9);
+			inferred = Global.filter (inferred);
+			NoiseRemoval.instSeqCleaning (inferred, this.envList [envIndex - 1], this.sml);
+			return inferred;
+		}
+
+		public void storeLexicon()
+		{
+			/* Function Description: Stores lexicon in a xml file to be used for
+			 * transfer learning */
+			System.IO.StreamWriter writer = new System.IO.StreamWriter (Constants.rootPath + Constants.dataFolder+"/BootstrapLexicon.xml");
+			writer.Write ("<lexicon>");
+			foreach(VerbProgram lexicon_ in this.lexicon)
+			{
+				foreach (LexicalEntry lexicalEntry in lexicon_.program) 
+				{
+					writer.WriteLine("<lexical_item verb=\""+lexicalEntry.cls_.verb.getName()+"\">");
+					/* Standardize the post-condition
+					 * due to noise removal; the post-condition often contains more objects than 
+					 * there are variables. We standardize the variables e.g.,
+					 * (state $var1 $var5) $var1 -> obj1; $var2 -> obj2; ... $var5 -> obj5
+					 * gets standardized as (state $var1 $var2) $var1 -> obj1; $var2 -> obj2 */
+
+					List<String> variables = new List<String> (); //e.g. $var1, $var4, $var5
+					List<String> objNames = new List<String> (); //Mug_2, Cup_3, ....
+
+					foreach (String term in lexicalEntry.predicatesPost) 
+					{
+						String[] atom = Global.getAtomic (term).Item2.Split(new char[]{' '}).ToArray();
+						Console.WriteLine ("Term : " + term + " with atoms " + atom.Length);
+						if (atom [1].StartsWith ("$"))
+							variables = variables.Union (new List<String> () { atom[1] }).ToList();
+						if(atom[2].StartsWith ("$"))
+							variables = variables.Union (new List<String> () { atom[2] }).ToList();
+					}
+
+					String newPostCondition = String.Join ("^", lexicalEntry.predicatesPost);
+
+					for (int varindex=1; varindex<=variables.Count(); varindex++) 
+						newPostCondition = newPostCondition.Replace (variables [varindex - 1], "$temp" + varindex.ToString ());
+					for (int varindex=1; varindex<=variables.Count(); varindex++) 
+						newPostCondition = newPostCondition.Replace ("$temp" + varindex.ToString (), "$var" + varindex.ToString ());
+
+					for (int varindex=1; varindex<=variables.Count(); varindex++) 
+					{
+						int orig = Int32.Parse(variables [varindex-1].Substring ("$var".Length));
+						objNames.Add (lexicalEntry.env_.objects[lexicalEntry.xiOrigMappingPredicatePost[orig-1]].uniqueName);
+					}
+
+					Console.WriteLine ("Post Condition "+newPostCondition+" and "+String.Join(", ",objNames));
+
+					writer.WriteLine ("<postcondition>" + newPostCondition + "</postcondition>");
+					for (int varindex=0; varindex<variables.Count(); varindex++) 
+						writer.WriteLine ("<object>" + objNames [varindex] + "</object>");
+					writer.WriteLine("</lexical_item>");
+				}
+			}
+			writer.Write ("</lexicon>");
+			writer.Flush ();
+			writer.Close ();
+		}
+
+		public void bootstrapLexicon()
+		{
+			/* Function Description: Bootstrap lexicon from xml file 
+			 * <lexicon>
+			 * 		<lexical_item verb="name">
+			 * 			<postcondition>constraints</postcondition>
+			 *			<object>name</object>
+			 * 			<object>name</object>
+			 * 			....
+			 * 		</lexical_item>
+			 * 		....
+			 * </lexicon>
+			 * Ideally, use RoboBrain for fetching the lexicon */
+
+			System.Xml.XmlTextReader reader = new System.Xml.XmlTextReader(Constants.rootPath + "BootstrapLexicon.xml");
+			List<String> postcondition = null;
+			Environment env = null;
+			Clause cls = null;
+
+			while (reader.Read())
+			{
+				switch (reader.NodeType)
+				{
+					case System.Xml.XmlNodeType.Element:
+						if (reader.Name.Equals ("lexical_item")) 
+						{
+							String verb = reader.GetAttribute (0);
+							SyntacticTree st = new SyntacticTree ();
+							st.changeVerb (verb);
+							cls = new Clause (st);
+							env = new Environment ();
+						}
+						if (reader.Name.Equals ("postcondition")) 
+						{
+							reader.Read ();
+							if(reader.Value.Length>0)
+								postcondition = reader.Value.Split (new char[] { '^' }).ToList ();
+						}
+						if (reader.Name.Equals ("object")) 
+						{
+							reader.Read ();
+							Object obj = new Object ();
+							obj.uniqueName = reader.Value;
+							env.objects.Add (obj);
+						}
+						break;
+
+					case System.Xml.XmlNodeType.EndElement:
+						if (reader.Name.Equals ("lexical_item")) 
+						{
+							if (postcondition == null || postcondition.Count () == 0) 
+								continue;
+
+							Clause cls_ = cls;
+							List<String> postcondition_ = postcondition;
+							Environment env_ = env;
+
+							LexicalEntry vtmp = new LexicalEntry (cls_, postcondition_, env_);
+							this.addVEILTemplate (vtmp);
+
+							cls = null;
+							postcondition = null;
+							env = null;
+						}
+						break;
+				}
+			}
+		}
+
+		public List<double[]> bootstrapWeights()
+		{
+			/* Function Description: Bootstraps weight from xml file.
+			 * Ideally, use RoboBrain for fetching weights. */
+
+			System.Xml.XmlTextReader reader = new System.Xml.XmlTextReader(Constants.rootPath + "Transfer_weights.xml");
+			List<double[]> weights = new List<double[]> ();
+
+			while (reader.Read())
+			{
+				switch (reader.NodeType)
+				{
+					case System.Xml.XmlNodeType.Element:
+					if (reader.Name.Equals ("weight")) 
+					{
+						reader.Read ();
+						if(reader.Value.Equals("$$"))
+							weights.Add(new double[0]);
+						else weights.Add (reader.Value.Split (new char[] { ',' }).Select (x => Double.Parse (x)).ToArray());
+					}
+					break;
+				}
+			}
+
+			return weights;
+		}
+
 		public List<List<double[]>> inference(List<bool> methods, List<int> test, List<object> param)
         {
             /* Function Description : Takes input from Main function of which
              * type of testing method to use and gives the output */
 
-			//test.RemoveRange (7, test.Count () - 7);
             List<List<double[]>> scores = new List<List<double[]>>(); //Method [ Metric [ Score ]  ]
             for (int i = 0; i < methods.Count(); i++)
             {
@@ -388,7 +550,7 @@ namespace ProjectCompton
 
 			//this.obj.getParserAccuracy (test);
 
-            List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> datas = this.obj.returnAllData();
+            List<Tuple<Tuple<int, int>, Clause, List<Instruction>, List<Clause>>> datas = this.prs.returnAllData();
             for (int i = 0; i < test.Count(); i++)
             {
 				Console.WriteLine ("Working on Test Case "+i.ToString()+"\n-----------------\n");
@@ -487,7 +649,7 @@ namespace ProjectCompton
                     scores[method][0][i] = (1 - scoreLV) * 100;
                     scores[method][1][i] = (1 - uWEED.Item1) * 100;
                     scores[method][2][i] = (1 - scoreWEED) * 100;
-					scores [method] [3] [i] = end.Item1 * 100;
+					scores[method][3][i] = end.Item1 * 100;
 
 					cumulIED = cumulIED + scores [method] [0] [i];
 					cumulEED = cumulEED + scores [method] [1] [i];
@@ -521,111 +683,127 @@ namespace ProjectCompton
             this.lg.writeToFile(data);
 			#endregion 
 
-			#region gnu_plot_data
-			/*System.IO.StreamWriter gplot_ied = new System.IO.StreamWriter(Constants.rootPath+"vgs_ftrupdate_70_10train_ied.dat");
-			System.IO.StreamWriter gplot_eed = new System.IO.StreamWriter(Constants.rootPath+"vgs_ftrupdate_70_10train_eed.dat");
-			gplot_ied.WriteLine("#Method VEIL+Gen+Storage (VGS) - 60 datapoints IED Score\n#iterations cumulativescore");
-			gplot_eed.WriteLine("#Method VEIL+Gen+Storage (VGS) - 60 datapoints EED SCore\n#iterations cumulativescore");
-			for(int i=0; i<test.Count();i++)
-			{
-				gplot_ied.WriteLine(i+"\t "+cumulativeIED[i]/(double)(i+1));
-				gplot_eed.WriteLine(i+"\t "+cumulativeEED[i]/(double)(i+1));
-			}
-			gplot_ied.Flush(); gplot_eed.Flush();
-			gplot_ied.Close(); gplot_eed.Close();*/
-			#endregion
-
             return scores;
         }
 
         static void Main(string[] args)
         {
-            /* Function Description : Main function which does the duty of running the algorithm on a given dataset.
+            /* Function Description: Main function which does the duty of running the algorithm on a given dataset.
              * It reads and parses the dataset as well as organizes it into train, validation and test dataset.
              * It then performs learning and runs the inference on the test dataset. The output is displayed in
-             * an interactive html manner. */
+             * an interactive html manner. There are three modes in which this code can be run - 
+             * 
+             * 0. Offline Standard: Given a dataset, perform cross-validation and learning and inference
+             * 1. Transfer Learning: Given a dataset and bootstrap data, perform inference on this dataset with different actions
+             * 2. Online Learning: Given an online sequence of datapoints, perform inference */
 
             Tester testObj = new Tester();
-			/*double s1 = testObj.inf.sensim.GetScore ("study desk", "coffee table");//giza fails, wordnet works
-			double s2 = testObj.inf.sensim.GetScore ("game", "cd"); //wordnet fails, giza works
-			double s3 = testObj.inf.sensim.GetScore ("xbox", "bag of chips");//both fail :P
-			double s4 = testObj.inf.sensim.GetScore ("pillows", "pillow");//giza fails
-			double s5 = testObj.inf.sensim.GetScore ("book", "book");//both work
-			double s6 = testObj.inf.sensim.GetScore ("couches", "loveseat");//both work
-			double s7 = testObj.inf.sensim.GetScore ("couches", "armchair");//both work*/
 
             //Step 1: Create datastructure needed by Inference and Learning
             #region pre_processing_noise_removal_analysis
 			testObj.loadAllEnv();                   //load the starting environments
-            testObj.obj.parseLabelledData(testObj.lg, testObj.envList);       //Parses all the data
+            testObj.prs.parseLabelledData(testObj.lg, testObj.envList);       //Parses all the data
 			//testObj.obj.parseUnsupervisedData(testObj.lg, testObj.envList);   //Gets unsupervised data
-			NoiseRemoval.cleanData(testObj);        //Clean the data
+			if(Constants.dataFolder.Equals("VEIL500"))
+				NoiseRemoval.cleanData(testObj);        //Clean the data
 			List<Tuple<List<int>, List<int>>> datas = testObj.crossValidator(); // [[train, test], [train,test]... ]
 			Console.WriteLine("Reading test from file");
-			NoiseRemoval.readNoiseFreeTestDataFromFile(datas.Last().Item2, testObj.obj, testObj.lg);
-			NoiseRemoval.store(testObj.obj, true);
+			if(Constants.dataFolder.Equals("VEIL500"))
+				NoiseRemoval.readNoiseFreeTestDataFromFile(datas.Last().Item2, testObj.prs, testObj.lg);
+			//NoiseRemoval.store(testObj.prs, true);
 			Console.WriteLine("Done reading - no parsing error");
 			testObj.loadIntermediateEnv();          //Load intermediate environments
 			Console.WriteLine("Done loading environment");
-			testObj.obj.storeAll(testObj.lg);       //Store the parsed data
+			testObj.prs.storeAll(testObj.lg);       //Store the parsed data
             testObj.datany.analyze();               //Analyze the dataset and output the analysis
 			List<List<List<double>>> evaluation = testObj.initEvaluation(); // Method [ Metric [ Scores ] ]
 			testObj.writeTime();
             #endregion
 
-            /* Step 2: Learning-Inference Cycle */
-			for (int j= datas.Count()-1; j < datas.Count(); j++)   //iterating over [ [train, test], [train, test] ..... ]
-            {
-				Console.WriteLine ("Beginning with Experiment "+j);
-                List<int> train = datas[j].Item1, test = datas[j].Item2;
-			
-				//train.RemoveRange (10, train.Count()-10);
-				//Global.store (testObj.obj, test);
-				testObj.lg.writeToFile ("<h2>Begining With Experiment Number " + j + "</h2> Size of Training Data " + train.Count () + " and Test Data " + test.Count () + "<br/>");
+			/* Step 2: Learning and Inference */
+			if (Constants.opmode == OpMode.Transfer) 
+			{
+				/* In our Transfer Learning setting, we have the following scenario
+				 * a dataset with possibly new actions is given as input, the algorithm
+				 * uses the lexicon, weights, feature tables (environment based) using
+				 * another dataset for bootstraping a learned model and then performs inference using it */
 
-                /* Sub-Step 2.1: Learning */
-				List<double[]> pivot = testObj.lrn.analyticGradientDescent(train, 0,j);    //Apply learning algorithms to train weights
+				//Since learning is not happening on the new dataset, it makes no sense to perform cross-validation
+				List<int> test = Enumerable.Range(Math.Max(0,testObj.prs.returnAllData().Count()-10), Math.Min(10,testObj.prs.returnAllData().Count())).ToList();
+
+				Console.WriteLine ("Going to transfer weights and lexicon");
+				//load parameters for transfer learning
+				testObj.bootstrapLexicon (); 							//Loads Lexicon from file
+				List<double[]> pivot = testObj.bootstrapWeights();    	//Load weights from file
+																		//Load features from file
 				List<object> param = testObj.inf.initDict (pivot);
-				//return;
-				/* Sub-Step 2.2: Build Structures Required For Inference */
-				Console.WriteLine ("Building Structure: Training Data "+train.Count());
-				testObj.bootstrapVEILTemplate(train);                                      //build the VEIL datastructure
-				testObj.displayStructure();                                    			   //display the data
-				Console.WriteLine ("Entering 1");
-				testObj.ftr.constructFeatureDataStructures(train, testObj.methods.Values.ToList(), testObj.veil,
-				                                           testObj.envList, testObj.listOfAllEnv, testObj.inf.sensim);  //construct data structures required for computing features
-				Console.WriteLine ("Its should be attained");
-				//Console.WriteLine ("storing veil templates");
-				//testObj.obj.storeVEILTemplates(testObj.veil, testObj.lg);
 
-				/* Sub-Step 2.4: Pumping New Templates */
-				/*Console.WriteLine ("Pumping New Templates");
-				testObj.createNewTemplatesFromUnsupervisedData (testObj.methods.Values.ToList (), param);
-				testObj.displayStructure();                                    			   //display the data
-				testObj.ftr.destroyer ();
-				testObj.ftr.constructFeatureDataStructures(train, testObj.methods.Values.ToList(),
-				                                           testObj.veil, testObj.envList);  //construct data structures required for computing features
-			    */
-
-                /* Sub-Step 2.5: Inference */
 				Console.WriteLine ("Performing Inference");
-                List<List<double[]>> score = testObj.inference(testObj.methods.Values.ToList(), test, param); //Do inference on the test data and get results [Method [Metric [numbers] ] ]
+				List<List<double[]>> score = testObj.inference(testObj.methods.Values.ToList(), test, param); //Do inference on the test data and get results [Method [Metric [numbers] ] ]
 
-                /* Sub-Step 2.6: Analyze the results */
-                for (int mth = 0; mth < testObj.methods.Count(); mth++)
-                {
-                    for (int mtr = 0; mtr < Metrics.numMetrics; mtr++)
-                        evaluation[mth][mtr] = evaluation[mth][mtr].Concat(score[mth][mtr].ToList()).ToList();
-                }
+				//Analyze the results
+				for (int mth = 0; mth < testObj.methods.Count(); mth++)
+				{
+					for (int mtr = 0; mtr < Metrics.numMetrics; mtr++)
+						evaluation[mth][mtr] = evaluation[mth][mtr].Concat(score[mth][mtr].ToList()).ToList();
+				}
 
-                testObj.destroyer(); //destroy data-structure
-            }
+				testObj.destroyer(); //destroy data-structure
+			}
+			else if(Constants.opmode == OpMode.Offline)
+			{
+	            /* Step 2: Cross-Validation Folds for offline computation */
+				for (int fold= datas.Count()-1; fold < datas.Count(); fold++)   //iterating over datas: [ [train, test], [train, test] ..... ]
+	            {
+					Console.WriteLine ("Beginning with Experiment "+fold);
+	                List<int> train = datas[fold].Item1, test = datas[fold].Item2;
+
+					//Global.store (testObj.obj, test);
+					testObj.lg.writeToFile ("<h2>Begining With Experiment Number " + fold + "</h2> Size of Training Data " + train.Count () + " and Test Data " + test.Count () + "<br/>");
+
+	                /* Sub-Step 2.1: Learning */
+					List<double[]> pivot = testObj.lrn.analyticGradientDescent(train, 0,fold);    //Apply learning algorithms to train weights
+					List<object> param = testObj.inf.initDict (pivot);
+
+					/* Sub-Step 2.2: Build Structures Required For Inference */
+					Console.WriteLine ("Building Structure: Training Data "+train.Count());
+					testObj.induceLexiconFromTraining(train);                                      //build the VEIL datastructure
+					testObj.displayStructure();                                    			   //display the data
+					testObj.ftr.constructFeatureDataStructures(train, testObj.methods.Values.ToList(), testObj.lexicon,
+					                                           testObj.envList, testObj.listOfAllEnv, testObj.inf.sensim);  //construct data structures required for computing features
+					//testObj.obj.storeVEILTemplates(testObj.veil, testObj.lg);
+
+					/* Sub-Step 2.4: Pumping New Templates */
+					/*Console.WriteLine ("Pumping New Templates");
+					testObj.createNewTemplatesFromUnsupervisedData (testObj.methods.Values.ToList (), param);
+					testObj.displayStructure();                                    			   //display the data
+					testObj.ftr.destroyer ();
+					testObj.ftr.constructFeatureDataStructures(train, testObj.methods.Values.ToList(),
+					                                           testObj.veil, testObj.envList);  //construct data structures required for computing features
+				    */
+
+	                /* Sub-Step 2.5: Inference */
+					Console.WriteLine ("Performing Inference");
+	                List<List<double[]>> score = testObj.inference(testObj.methods.Values.ToList(), test, param); //Do inference on the test data and get results [Method [Metric [numbers] ] ]
+
+	                /* Sub-Step 2.6: Analyze the results */
+	                for (int mth = 0; mth < testObj.methods.Count(); mth++)
+	                {
+	                    for (int mtr = 0; mtr < Metrics.numMetrics; mtr++)
+	                        evaluation[mth][mtr] = evaluation[mth][mtr].Concat(score[mth][mtr].ToList()).ToList();
+	                }
+
+					testObj.storeLexicon ();
+	                testObj.destroyer(); //destroy data-structure
+					return;
+	            }
+			}
 
 			//Step 3: Analyze the results
             testObj.inf.close();
 			double cacheHitPercent = (testObj.symp.cacheHit * 100) / (double)(testObj.symp.cacheHit + testObj.symp.cacheMiss + Constants.epsilon); //cache hit of interpolation
 			double atomicHitPercent = (testObj.symp.atomicCaseHit * 100) / (double)(testObj.symp.atomicCaseHit + testObj.symp.atomicCaseMiss + Constants.epsilon); //cache hit of interpolation
-            String data = "End of Overall Experiment : <br/><table><tr><td>Method Name</td><td>Average</td><td>Variance</td></tr>";
+            StringBuilder toWrite = new StringBuilder("End of Overall Experiment : <br/><table><tr><td>Method Name</td><td>Average</td><td>Variance</td></tr>");
             for (int mth = 0; mth < testObj.methods.Count(); mth++)
             {
 				if (testObj.methods.ElementAt (mth).Value) 
@@ -633,15 +811,15 @@ namespace ProjectCompton
 					for (int mtr=0; mtr<Metrics.numMetrics; mtr++) 
 					{
 						Console.WriteLine ("Metric "+mtr+" "+evaluation [mth] [mtr].Average ());
-						data = data + "<tr><td>" + testObj.methods.ElementAt (mth).Key + "</td><td>" + evaluation [mth] [mtr].Average () +
-							"</td><td>" + Global.variance (evaluation [mth] [mtr].ToArray ()) + "</td></tr>";
+						toWrite = toWrite.Append("<tr><td>" + testObj.methods.ElementAt (mth).Key + "</td><td>" + evaluation [mth] [mtr].Average () +
+							"</td><td>" + Global.variance (evaluation [mth] [mtr].ToArray ()) + "</td></tr>");
 					}
 				}
             }
 
-            data = data + "</table>";
+            toWrite = toWrite.Append("</table>");
             testObj.lg.setHighPriority();
-            testObj.lg.writeToFile(data);
+            testObj.lg.writeToFile(toWrite.ToString());
             testObj.lg.setLowPriority();
 		        
             //Step 4: Delete the datastructures and close the streams
@@ -649,9 +827,8 @@ namespace ProjectCompton
             testObj.ss.Stop();
             testObj.writeTime();
 			testObj.symp.storeCache ();
-            testObj.lg.close(); //close the data
+            testObj.lg.close(); //close the log stream
 
-			Console.WriteLine ("Num "+Global.num);
 			Console.WriteLine ("Cache Hit Percent  "+cacheHitPercent);
 			Console.WriteLine ("Atomic Hit Percent "+atomicHitPercent);
 			Console.WriteLine ("GoodBye");

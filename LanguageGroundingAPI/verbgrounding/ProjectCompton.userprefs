@@ -1,48 +1,18 @@
 ﻿<Properties>
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="NounPhrase.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Parser.cs">
     <Files>
-      <File FileName="Tester.cs" Line="142" Column="2" />
       <File FileName="Constants.cs" Line="1" Column="1" />
-      <File FileName="Learning.cs" Line="1" Column="1" />
-      <File FileName="SyntacticTree.cs" Line="1" Column="1" />
-      <File FileName="NounPhrase.cs" Line="1" Column="1" />
-      <File FileName="Clause.cs" Line="1" Column="1" />
-      <File FileName="Global.cs" Line="1" Column="1" />
+      <File FileName="Tester.cs" Line="1" Column="1" />
+      <File FileName="Inference.cs" Line="329" Column="5" />
       <File FileName="Simulator.cs" Line="1" Column="1" />
-      <File FileName="Template.cs" Line="1" Column="1" />
-      <File FileName="VeilTemplate.cs" Line="1" Column="1" />
-      <File FileName="Logger.cs" Line="1" Column="1" />
-      <File FileName="Expression.cs" Line="1" Column="1" />
-      <File FileName="wordnetdotnet/Projects/Thanh/SentenceSimilarity.cs" Line="1" Column="1" />
-      <File FileName="NoiseRemoval.cs" Line="1" Column="1" />
-      <File FileName="Mapping.cs" Line="1" Column="1" />
-      <File FileName="Features.cs" Line="1" Column="1" />
-      <File FileName="Inference.cs" Line="1240" Column="15" />
-      <File FileName="Parser.cs" Line="1" Column="1" />
       <File FileName="SymbolicPlanner.cs" Line="1" Column="1" />
-      <File FileName="Metrics.cs" Line="1" Column="1" />
+      <File FileName="Mapping.cs" Line="1" Column="1" />
+      <File FileName="Parser.cs" Line="205" Column="9" />
     </Files>
-    <Pads>
-      <Pad Id="ProjectPad">
-        <State expanded="True">
-          <Node name="ProjectCompton" expanded="True">
-            <Node name="NounPhrase.cs" selected="True" />
-          </Node>
-        </State>
-      </Pad>
-      <Pad Id="ClassPad">
-        <State expanded="True" selected="True" />
-      </Pad>
-      <Pad Id="MonoDevelop.Debugger.WatchPad">
-        <State />
-      </Pad>
-    </Pads>
   </MonoDevelop.Ide.Workbench>
   <MonoDevelop.Ide.DebuggingService.Breakpoints>
     <BreakpointStore />
   </MonoDevelop.Ide.DebuggingService.Breakpoints>
-  <MonoDevelop.Ide.DebuggingService.PinnedWatches>
-    <Watch file="Tester.cs" line="551" offsetX="918" offsetY="9900" expression="f" liveUpdate="False" />
-  </MonoDevelop.Ide.DebuggingService.PinnedWatches>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
 </Properties>
