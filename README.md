@@ -14,3 +14,11 @@ Features
 1. Graph Query Feature: support for fetch
 2. Programming Constructs: basic support
 3. Project Specific Feature: Not supporting in this paper
+
+To run fetch query<br/>
+1. required python, py2neo<br/>
+2. git clone https://github.com/RoboBrainCode/RaQueL.git<br/>
+3. python raquel.py
+
+to change the query change the last statement in raquel.py <br/>
+fetch(RaQueL query)
