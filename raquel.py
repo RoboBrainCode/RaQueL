@@ -2,6 +2,7 @@ import sys
 import re
 from py2neo import Graph
 import csv
+from cyParser import cyParser
 
 # RaQueL 1.0 : RoboBrain Query Library
 # RoboBrain Raquel Team
@@ -18,8 +19,11 @@ def fetch(pattern):
             can be omitted in which case they are not returned. However,
             before making the cypher query, we add these variables.
 	'''
+	# print pattern
 	remote_graph = Graph(graph_url)
-	results = remote_graph.cypher.execute("MATCH "+pattern+" RETURN a.handle,b.handle  LIMIT 25")
+	return_string = cyParser(pattern)
+	# print type(return_string)
+	results = remote_graph.cypher.execute("MATCH "+ pattern+" RETURN " + return_string +" LIMIT 25")
 	print results
 	return results
 
