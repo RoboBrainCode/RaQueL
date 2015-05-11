@@ -21,15 +21,16 @@ def fetch(pattern):
 	'''
 	# print pattern
 	remote_graph = Graph(graph_url)
-	return_string, midQuery, propertyFound, propertyList = cyParser(pattern)
-	#this if can be avoided
-	if propertyFound == False:
-		results = remote_graph.cypher.execute("MATCH "+ pattern +" RETURN " + return_string +" LIMIT 25")
-	else:
-		results = remote_graph.cypher.execute("MATCH "+ midQuery+" RETURN " + return_string +" LIMIT 25",propertyList)
+	return_string = cyParser(pattern)
+	# print type(return_string)
+	results = remote_graph.cypher.execute("MATCH "+ pattern +" RETURN " + return_string +" LIMIT 25")
 	print results
 	return results
 
-# MATCH ({handle:"wall"})-[`HAS_MATERIAL`]->(b) RETURN b.handle LIMIT 25
-fetch("({handle:\"wall\"})-[`HAS_MATERIAL`]->(b)")
+fetch("({handle:'wall'})-[:`HAS_MATERIAL`]->(b)")
+# fetch("(a{handle:'wall'})-[`HAS_MATERIAL`]->(v{src:'HAS_AFFORDANCE'})")
+# fetch("(v)-[`HAS_MATERIAL`]->({handle:'wall'})")
+
+# still not supported
+# fetch("({handle:'wall'})-[r*]->({handle:'cup',type:'metal'})")
 
