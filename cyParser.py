@@ -84,23 +84,23 @@ def cyParser(pattern):
 	
 	init_s = initParser(node_s)
 	if init_s != -1:
-		returnStr  = returnStr + init_s + ".handle"
+		returnStr  = returnStr + init_s 
 		insertComma = True
 	
 	init_r = initParser(relationShip)
 	if init_r != -1:
 		if insertComma:
-			returnStr = returnStr + "," + init_r + ".keywords"
+			returnStr = returnStr + "," + init_r 
 		else:
-			returnStr = returnStr + init_r + ".keywords"
+			returnStr = returnStr + init_r 
 			insertComma = True
 
 	init_e = initParser(node_e)
 	if init_e != -1:
 		if insertComma:
-			returnStr = returnStr + "," + init_e + ".handle"
+			returnStr = returnStr + "," + init_e 
 		else:
-			returnStr = returnStr + init_e + ".handle"
+			returnStr = returnStr + init_e 
 
 	# print returnStr
 	return returnStr
