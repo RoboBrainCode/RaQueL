@@ -46,4 +46,14 @@ fetch("({handle:'wall'})-[e:`HAS_MATERIAL`]->(b)")
 # results = graph.cypher.execute("MATCH ({name:'Tom HANKS'})-[e*..2]->({name:'Depp'}) RETURN e")
 # print SortBy('Belief',results)
 
+### to call lazy map
+# from affordances import affordances
+# from itertools import imap
+# iter = imap( lambda u: affordances(u) ,objects)
+# iter.next()
 
+### to call lazy filter
+# from parents import parents
+# from itertools import ifilter
+# iter = ifilter( lambda u: len(parents(u)) == 1 ,objects)		# where objects is a list recordList
+# iter.next()	
