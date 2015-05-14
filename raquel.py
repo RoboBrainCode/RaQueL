@@ -29,10 +29,21 @@ def fetch(pattern):
 	printingRecords(results)
 	return results
 
+### to fetch using a pattern
 fetch("({handle:'wall'})-[e:`HAS_MATERIAL`]->(b)")
 # fetch("(a{handle:'wall'})-[`HAS_MATERIAL`]->(v{src:'HAS_AFFORDANCE'})")
 # fetch("(v)-[`HAS_MATERIAL`]->({handle:'wall'})")
 
 # still not supported
 # fetch("({handle:'wall'})-[r*]->({handle:'cup',type:'metal'})")
+
+
+### to get the belief of a record containing list of relationship
+# results = graph.cypher.execute("MATCH ({name:'Tom HANKS'})-[e*..2]->({name:'Depp'}) RETURN e")
+# Belief(results[1])
+
+### to call Sort the paths based on their belief 
+# results = graph.cypher.execute("MATCH ({name:'Tom HANKS'})-[e*..2]->({name:'Depp'}) RETURN e")
+# print SortBy('Belief',results)
+
 
