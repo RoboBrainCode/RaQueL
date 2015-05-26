@@ -106,12 +106,12 @@ def cyParser(pattern):
 	return returnStr
 
 
-def main():
+# def main():
 	
-	#test cases
-	# cyParser("({handle:\"wall\"})-[`HAS_MATERIAL`]->(b)")
-	# cyParser("(v)-[`HAS_MATERIAL`]->({handle:\"wall\"})")
-	# cyParser("(a{handle:\"wall\"})-[`HAS_MATERIAL`]->(v{src:\"HAS_AFFORDANCE\"})")
-	cyParser("({handle:\"wall\"})-[r*]->({handle:\"cup\",type\"metal\"})")
+# 	#test cases
+# 	# cyParser("({handle:'wall'})-[`HAS_MATERIAL`]->(b)")
+# 	# cyParser("(v)-[`HAS_MATERIAL`]->({handle:'wall'})")
+# 	# cyParser("(a{handle:'wall'})-[`HAS_MATERIAL`]->(v{src:'HAS_AFFORDANCE'})")
+# 	print cyParser("({handle:'wall'})-[r*]->({handle:'cup',type'metal'})")
 
-main()
+# main()
