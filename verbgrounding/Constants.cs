@@ -22,8 +22,8 @@ namespace ProjectCompton
     class Constants
     {
         /*Class Description : Describes various constants*/
-		internal static string rootPath = "/home/robo328b/dipendra_tellmedave/ProjectCompton/";//@"/home/dipendra/Research/ProjectCompton/";// @"/Users/Ella/Documents/research/ProjectCompton/";
-		internal static string UBLPath = @"/home/robo328b/dipendra_tellmedave/LambdaExpression/";//@"/home/dipendra/Research/verbgrounding/LambdaExpression/";//@"/Users/Ella/Documents/research/verbgrounding/LambdaExpression/";
+		internal static string rootPath = "/home/arpit/ec2weaver/RaQueL/verbgrounding/";//@"/home/dipendra/Research/ProjectCompton/";// @"/Users/Ella/Documents/research/ProjectCompton/";
+		internal static string UBLPath = @"/home/arpit/ec2weaver/RaQueL/verbgrounding/LambdaExpression/";//@"/home/dipendra/Research/verbgrounding/LambdaExpression/";//@"/Users/Ella/Documents/research/verbgrounding/LambdaExpression/";
 		internal static string problemName = "data_Feb-18-2015.xml"; //"data_Jan-12-2015.xml"; //Name of the data file. See ReadMe for details on format
 		internal static string veilFileName = @"VEIL500/" + Constants.problemName;//@"VEIL500/data_May-07-2014_1.xml";
         internal static string cygwinPath = @"C:/cygwin64/bin/"; //@"/Users/Ella/Documents/research/ProjectCompton/"; //cygwin directory

@@ -1,12 +1,12 @@
 ﻿<Properties>
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="NounPhrase.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Tester.cs">
     <Files>
-      <File FileName="Tester.cs" Line="142" Column="2" />
+      <File FileName="Tester.cs" Line="11" Column="4" />
       <File FileName="Constants.cs" Line="1" Column="1" />
       <File FileName="Learning.cs" Line="1" Column="1" />
       <File FileName="SyntacticTree.cs" Line="1" Column="1" />
-      <File FileName="NounPhrase.cs" Line="1" Column="1" />
+      <File FileName="NounPhrase.cs" Line="22" Column="17" />
       <File FileName="Clause.cs" Line="1" Column="1" />
       <File FileName="Global.cs" Line="1" Column="1" />
       <File FileName="Simulator.cs" Line="1" Column="1" />
@@ -18,7 +18,7 @@
       <File FileName="NoiseRemoval.cs" Line="1" Column="1" />
       <File FileName="Mapping.cs" Line="1" Column="1" />
       <File FileName="Features.cs" Line="1" Column="1" />
-      <File FileName="Inference.cs" Line="1240" Column="15" />
+      <File FileName="Inference.cs" Line="1" Column="1" />
       <File FileName="Parser.cs" Line="1" Column="1" />
       <File FileName="SymbolicPlanner.cs" Line="1" Column="1" />
       <File FileName="Metrics.cs" Line="1" Column="1" />
@@ -27,7 +27,7 @@
       <Pad Id="ProjectPad">
         <State expanded="True">
           <Node name="ProjectCompton" expanded="True">
-            <Node name="NounPhrase.cs" selected="True" />
+            <Node name="Tester.cs" selected="True" />
           </Node>
         </State>
       </Pad>

@@ -1,0 +1,6 @@
+global affordances
+objects =fetch("({handle:'sitting_human'})-[:`CAN_USE`]->(V)")
+affordances=lambda n:fetch("({handle :'" + n + "'})-[:`HAS_AFFORDANCE`]->(v)")
+iter = imap( lambda u: affordances(u) ,objects[1])
+print iter.next()
+print iter.next()

@@ -45,6 +45,9 @@ def runQuery(cypherQuery):
 		# print funcNum
 		return returnNodesBackward(src=dict_e['handle'],path_len_min=propertyList['start'],path_len_max=propertyList['end'])
 		# return '4'
+	elif funcNum==8:
+		# print funcNum, dict_s, propertyList, dict_e
+		return dummyfunc()
 	else:
 		return 'invalid_input'
 

@@ -16,7 +16,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
+using VerbProgram.Class;
 namespace ProjectCompton
 {
     class Tester
@@ -557,7 +557,7 @@ namespace ProjectCompton
             //Step 1: Create datastructure needed by Inference and Learning
             #region pre_processing_noise_removal_analysis
 			testObj.loadAllEnv();                   //load the starting environments
-            testObj.obj.parseLabelledData(testObj.lg, testObj.envList);       //Parses all the data
+            testObj.obj.parseLabelledData(testObj.lg, testObj.envList);       //Parses all the data for training
 			//testObj.obj.parseUnsupervisedData(testObj.lg, testObj.envList);   //Gets unsupervised data
 			NoiseRemoval.cleanData(testObj);        //Clean the data
 			List<Tuple<List<int>, List<int>>> datas = testObj.crossValidator(); // [[train, test], [train,test]... ]

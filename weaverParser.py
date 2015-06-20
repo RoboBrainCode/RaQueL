@@ -1,3 +1,15 @@
+import re
+def addedgeProp(prop):
+	# print "new func: "+prop
+	propertyList = {}
+	keyName_regex = re.compile(r'\w+')
+	m=keyName_regex.findall(prop)
+	for i in range(0,len(m)/2): 
+		propertyList[m[2*i]]=m[2*i+1] 
+	# print "check here: ",
+	# print propertyList
+	return propertyList
+
 def propertyToDict(label,phase):
 	if phase == 0 or phase == 2:
 		return {'handle':label}
@@ -25,7 +37,7 @@ def initParser(NoR, phase):
 	'''takes input the string to be parsed 
 		returns weaver function index to be called and propertyList
 	'''
-	# print NoR
+	# print "initParser: "+NoR
 	counter = 0
 	a = '0'
 	b = '0'
@@ -45,15 +57,23 @@ def initParser(NoR, phase):
 	if phase == 0 or phase == 2:
 		if b == '1':
 			labelStart = NoR.rfind(':')
+			# print NoR[labelStart+2:-2]
 			propertyList = propertyToDict(NoR[labelStart+2:-2],phase)
 		return a, b, propertyList
 
 	elif phase == 1:
 		propertyStart = NoR.find('`')
+		otherProp = NoR.find('{')
 		if propertyStart != -1:
 			b = '1'
 			propertyStop = NoR.rfind('`')
+			# print NoR[propertyStart+1:propertyStop]
 			propertyList = propertyToDict(NoR[propertyStart+1:propertyStop],phase)
+			otherProp = NoR[propertyStop:].find('{')
+			if otherProp != -1:
+				propertyList.update(addedgeProp(NoR[propertyStop+otherProp+1:-1]))
+		elif otherProp != -1:
+			propertyList.update(addedgeProp(NoR[otherProp:-1]))
 		multipleHop = NoR.find('*')
 		
 		if multipleHop != -1:
@@ -73,11 +93,17 @@ def cyParser(pattern):
 	node_s = pattern[s1+1:s2]
 	# print node_s
 	
+	#in case of node search only
+	node_search = pattern.find('-')
+	if node_search== -1:
+		a, b, dict_s = initParser(node_s,0)
+		return 	8, dict_s, {}, {}
+
 	r1 = pattern.find('[')
 	r2 = pattern.rfind(']')
 	#relationship 
 	relationShip = pattern[r1+1:r2]
-	# print relationShip
+	# print "relationShip: "+relationShip
 
 	e1 = pattern[s2+1:].find('(')
 	e2 = pattern[s2+1:].find(')')
@@ -105,6 +131,8 @@ def cyParser(pattern):
 	# indicator[2], indicator[3], indicator[6], propertyList = initParser(relationShip,1)
 	a, b, c, propertyList = initParser(relationShip,1)
 	indicator = indicator[:2] + a + b + indicator[4:6] + c
+	# print "propertyList: ",
+	# print propertyList
 	# print indicator
 
 	if indicator[4] == '1':
@@ -143,13 +171,14 @@ def cyParser(pattern):
 5: multiple hop
 6: n-hop forward
 7: n-hop backward
+8: node search
 '''
 
 # def main():
 # 	# print initParser("a{handle:'wall'}",0)
 # 	# print extractPathIndices('..3')
-# 	print cyParser("({handle:'wall'})-[]->(e)")
-# 	print cyParser("({handle:'wall'})-[:`HAS_MATERIAL`]->(e)")
+	# print cyParser("({handle:'wall'})-[]->(e)")
+	
 # 	print cyParser("(s)-[:`HAS_MATERIAL`]->({handle:'wall'})")
 # 	print cyParser("(s)-[]->({handle:'wall'})")
 # 	print cyParser("({handle:'wall'})-[e]->({handle:'metal'})")
@@ -159,5 +188,5 @@ def cyParser(pattern):
 # 	print cyParser("({handle:'wall'})-[*2..5]->(e)")
 # 	print cyParser("(v)-[*5]->({handle:'wall'})")		
 		
-
-# main()
+# print cyParser("({handle:'wall'})-[{node:'wont'}]->(e)")
+print cyParser("({handle:'wall'})")

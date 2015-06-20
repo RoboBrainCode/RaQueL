@@ -68,8 +68,11 @@ def regex_check(transaction,funcName):
 	elif funcName == 'fetch':
 		# print 'i m in'
 
+		## only node fetch case
+		fetch_reg = re.compile(r'(\b[\w./]*\s*=\s*)?fetch'r'\s*[(]\s*\"\s*[(]\s*(\s*([\w./]+)?\s*(:\s*`[\w./]+`)?)?\s*({\s*([\w./]+\s*:\s*\'[\w./]+\'\s*)?})?\s*[)]')
+
 		## pure fetch cases
-		fetch_reg = re.compile(r'(\b[\w./]*\s*=\s*)?fetch'r'\s*[(]\s*\"\s*[(]\s*(\s*([\w./]+)?\s*(:\s*`[\w./]+`)?)?\s*({\s*([\w./]+\s*:\s*\'[\w./]+\'\s*)?})?\s*[)]'r'\s*-\s*[[]\s*[\w./]*\s*(:\s*`[\w./]+`)?(\*([0-9])?\.\.([0-9])?)?\s*({\s*([\w./]+\s*:\s*\'[\w./]+\'\s*)?})?\s*[]]'r'\s*->\s*[(]\s*[\w./]*\s*(:\s*`[\w./]+`)?\s*({\s*([\w./]+\s*:\s*\'[\w./]+\'\s*)?})?\s*[)]'r'\s*\"\s*[)]\s*')
+		# fetch_reg = re.compile(r'(\b[\w./]*\s*=\s*)?fetch'r'\s*[(]\s*\"\s*[(]\s*(\s*([\w./]+)?\s*(:\s*`[\w./]+`)?)?\s*({\s*([\w./]+\s*:\s*\'[\w./]+\'\s*)?})?\s*[)]'r'\s*-\s*[[]\s*[\w./]*\s*(:\s*`[\w./]+`)?(\*([0-9])?\.\.([0-9])?)?\s*({\s*([\w./]+\s*:\s*\'[\w./]+\'\s*)?})?\s*[]]'r'\s*->\s*[(]\s*[\w./]*\s*(:\s*`[\w./]+`)?\s*({\s*([\w./]+\s*:\s*\'[\w./]+\'\s*)?})?\s*[)]'r'\s*\"\s*[)]\s*')
 
 		m = fetch_reg.search(transaction)
 		if m:
@@ -167,4 +170,8 @@ if __name__ == "__main__":
 	# print web2rql("global entities, media\nentities = lambda n: fetch(\"(v)-[:`HAS_MEDIA`]->({handle :'\" + n + \"'})\")\nmedia = lambda n:fetch(\"({handle :'\" + n + \"'})-[:`HAS_MEDIA`]->(v)\")\nind_media = lambda a: ifilter(lambda u: len(entities(u)[1])==1,(media(a))[1])\niter1= ind_media('tv')\nprint iter1.next()\njt_media = lambda a1,a2: ifilter(lambda u: len(entities(u)[1])==2 and u in media(a2)[1],(media(a1))[1])\niter2 = jt_media('tv','television_set')\nprint iter2.next()")
 
 	#for ex1
-	print web2rql("fetch(\"({handle:'standing_human'})-[:`CAN_USE`]->(v)\")")
+	# print web2rql("fetch(\"({handle:'standing_human'})-[:`CAN_USE`{node:'push'}]->(v)\")")
+
+	#for multiple edge proper
+	print web2rql("fetch(\"({handle:'standing_human'})-[{node:'push'}]->(v)\")")
+	# print web2rql("fetch(\"({handle:'wall'})\")")
